@@ -265,6 +265,48 @@ const Theory = (() => {
     return { kept, trimmed };
   }
 
-  return { KEYS, QUALITIES, CATEGORIES, MOVES, DEFAULT_RULES, STEPS,
+  // ---------- tension ----------
+  // How much of chord A's tension does the move to chord B resolve, minus the
+  // tension B itself lands on. Positive resolves, negative adds tension.
+  //   +3  a tritone in A collapses by contrary half steps into B
+  //   +1  each note of A a half step from B's root, 3rd or 5th
+  //   +1  each note that "owes" a resolution and pays it: A's 7th falling to
+  //       B's 3rd, a sus 4th dropping to B's 3rd, a ♭5 or °7 falling a half step
+  //   -3  each tritone B lands on,  -1  landing on a suspension
+  const tritonePairs = (pcs) => pcs.filter((x) => x < mod12(x + 6) && pcs.includes(mod12(x + 6))).map((x) => [x, mod12(x + 6)]);
+
+  function tension(a, b) {
+    const qa = QUALITIES[a.quality];
+    const inB = (pc) => b.pcs.includes(mod12(pc));
+    const stable = b.pcs.slice(0, 3);   // root, 3rd, 5th
+    const inStable = (pc) => stable.includes(mod12(pc));
+    const thirdB = b.pcs[1];
+    const parts = [];
+    let resolved = 0, landed = 0;
+
+    for (const [x, y] of tritonePairs(a.pcs)) {
+      if ((inB(x + 1) && inB(y - 1)) || (inB(x - 1) && inB(y + 1))) {
+        resolved += 3;
+        parts.push(`tritone ${a.spelling[x].name}–${a.spelling[y].name} collapses`);
+      }
+    }
+    const steps = a.pcs.filter((x) => inStable(x + 1) || inStable(x - 1)).length;
+    if (steps) { resolved += steps; parts.push(`${steps} half step${steps > 1 ? 's' : ''} into the root, 3rd or 5th`); }
+
+    const seventh = mod12(a.rootPc + qa.seventh);
+    const fall = mod12(seventh - thirdB);
+    if (fall === 1 || fall === 2) { resolved += 1; parts.push('7th falls to the 3rd'); }
+    if (a.quality === 'sus7' && mod12(a.rootPc + 5 - thirdB) === 1) { resolved += 1; parts.push('sus 4th drops to the 3rd'); }
+    if (qa.fifth === 6 && inB(a.rootPc + 5)) { resolved += 1; parts.push('♭5 falls a half step'); }
+    if (a.quality === 'dim7' && inB(a.rootPc + 8)) { resolved += 1; parts.push('°7 falls a half step'); }
+
+    const tB = tritonePairs(b.pcs).length;
+    if (tB) { landed += 3 * tB; parts.push(tB > 1 ? `lands on ${tB} tritones` : 'lands on a tritone'); }
+    if (b.quality === 'sus7') { landed += 1; parts.push('lands on a suspension'); }
+
+    return { score: resolved - landed, resolved, landed, parts };
+  }
+
+  return { KEYS, QUALITIES, CATEGORIES, MOVES, DEFAULT_RULES, STEPS, tension,
     buildPalette, transition, transitionTable, trim, freeOffset, mod12, spellLetter, spellInKey };
 })();

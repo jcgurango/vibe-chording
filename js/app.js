@@ -40,6 +40,21 @@
     return Theory.transition(state.byId.get(a.id), state.byId.get(b.id), state.rules, entryBass(a), entryBass(b));
   }
 
+  // ---------- tension colour ----------
+  // Red (adds tension) through yellow (neutral) to green (resolves).
+  const T_LO = -4, T_HI = 6, T_STEPS = 11;
+  function tensionT(score) {
+    const t = score < 0 ? 0.5 * (1 - Math.min(1, score / T_LO)) : 0.5 + 0.5 * Math.min(1, score / T_HI);
+    return Math.max(0, Math.min(1, t));
+  }
+  const tensionHue = (t) => t < 0.5 ? t * 2 * 52 : 52 + (t - 0.5) * 2 * 80;
+  const tensionColor = (score) => `hsl(${tensionHue(tensionT(score)).toFixed(0)} 85% 58%)`;
+  const tensionStep = (score) => Math.round(tensionT(score) * (T_STEPS - 1));
+  const tensionLabel = (score) => (score > 0 ? `resolves +${score}` : score < 0 ? `tension ${score}` : 'neutral 0');
+  const tensionChip = (t) =>
+    `<span class="tens" style="--t: ${tensionColor(t.score)}" title="${t.parts.join(' · ') || 'nothing owed, nothing landed on'}">${tensionLabel(t.score)}</span>`;
+  const tensionOf = (a, b) => Theory.tension(state.byId.get(a.id), state.byId.get(b.id));
+
   // ---------- insertion point ----------
   // The progression with the ghost spliced in at the cursor.
   function sequence() {
@@ -144,9 +159,7 @@
       svgEl('path', { d: 'M0 0 L10 5 L0 10 z', fill: color }, m);
     };
     marker('arrow-base', 'rgba(255,255,255,.25)');
-    marker('arrow-common', '#2ec4b6');
-    marker('arrow-chromatic', '#c58cff');
-    marker('arrow-root', '#ffb347');
+    for (let i = 0; i < T_STEPS; i++) marker(`arrow-t${i}`, `hsl(${tensionHue(i / (T_STEPS - 1)).toFixed(0)} 85% 58%)`);
 
     layers.base = svgEl('g', { class: 'edges-base' }, svg);
     layers.active = svgEl('g', { class: 'edges-active' }, svg);
@@ -216,15 +229,16 @@
     for (const c of state.palette) {
       if (!legal.has(c.id)) continue;
       const cand = { id: c.id, slash: null };
-      if (p && c.id !== p.id) {
-        const t = transEntries(p, cand);
-        svgEl('path', { d: edgePath(p.id, c.id, 0.1), 'data-node': c.id, 'data-kind': t.kinds[0] }, layers.active);
-      }
-      if (nx && c.id !== nx.id) {
-        const t = transEntries(cand, nx);
-        svgEl('path', { d: edgePath(c.id, nx.id, 0.1), 'data-node': c.id, 'data-kind': t.kinds[0], class: 'into' }, layers.active);
-      }
+      if (p && c.id !== p.id) arrow(p.id, c.id, tensionOf(p, cand).score, '');
+      if (nx && c.id !== nx.id) arrow(c.id, nx.id, tensionOf(cand, nx).score, 'into');
     }
+  }
+
+  function arrow(from, to, score, cls) {
+    svgEl('path', {
+      d: edgePath(from, to, 0.1), 'data-node': cls === 'into' ? from : to, class: cls,
+      style: `stroke: ${tensionColor(score)}`, 'marker-end': `url(#arrow-t${tensionStep(score)})`,
+    }, layers.active);
   }
 
   // ---------- piano note filter ----------
@@ -354,9 +368,11 @@
     let html = `<b>${c.name}</b><span class="roman">${c.roman}</span><br>${tones}<br><span class="role">${c.catLabel} · ${c.role}</span>`;
     for (const ch of checks({ id, slash: null })) {
       const other = entryName(ch.other);
+      const tn = ch.dir === 'after' ? tensionOf(ch.other, { id }) : tensionOf({ id }, ch.other);
       html += ch.t.ok
         ? `<br><span class="ok">${ch.dir} ${other}: ${ch.t.reasons.join(' · ')}</span>`
         : `<br><span class="no">${ch.dir === 'after' ? "can't follow" : "can't lead into"} ${other}</span>`;
+      html += `<br><span class="tens" style="--t: ${tensionColor(tn.score)}">${tensionLabel(tn.score)}</span>${tn.parts.length ? ' · ' + tn.parts.join(' · ') : ''}`;
     }
     tip.innerHTML = html;
     tip.hidden = false;
@@ -431,14 +447,17 @@
     let warn = false;
     if (isGhost) {
       for (const ch of checks(e)) {
-        if (ch.t.ok) parts.push(`${ch.dir} ${entryName(ch.other)}: ${ch.t.reasons.join(' · ')}`);
-        else { parts.push(`${ch.dir === 'after' ? "can't follow" : "can't lead into"} ${entryName(ch.other)}`); warn = true; }
+        const tn = ch.dir === 'after' ? tensionOf(ch.other, e) : tensionOf(e, ch.other);
+        if (ch.t.ok) parts.push(`${ch.dir} ${entryName(ch.other)}: ${ch.t.reasons.join(' · ')} ${tensionChip(tn)}`);
+        else { parts.push(`${ch.dir === 'after' ? "can't follow" : "can't lead into"} ${entryName(ch.other)} ${tensionChip(tn)}`); warn = true; }
       }
       if (!parts.length) parts.push(si === 0 ? 'start' : 'unfiltered');
     } else if (si > 0) {
-      const t = transEntries(seq[si - 1].e, e);
+      const prevE = seq[si - 1].e;
+      const t = transEntries(prevE, e);
       if (t.ok) parts.push(t.reasons.join(' · '));
       else { parts.push('does not satisfy the current rules'); warn = true; }
+      parts.push(tensionChip(tensionOf(prevE, e)));
     } else parts.push('start');
     if (si > 0) parts.push(`moves ${v.movement} st`);
 
@@ -618,9 +637,9 @@
     for (const [cat, label] of Object.entries(Theory.CATEGORIES)) {
       legend.insertAdjacentHTML('beforeend', `<span><i style="--c: var(--${cat})"></i>${label}</span>`);
     }
-    for (const [kind, label] of [['common', 'common tones'], ['chromatic', 'chromatic'], ['root', 'root motion']]) {
-      legend.insertAdjacentHTML('beforeend', `<span><i class="edge" style="--c: var(--${kind})"></i>${label}</span>`);
-    }
+    const stops = [];
+    for (let i = 0; i < T_STEPS; i++) stops.push(`hsl(${tensionHue(i / (T_STEPS - 1)).toFixed(0)} 85% 58%)`);
+    legend.insertAdjacentHTML('beforeend', `<span class="tension-key">adds tension<i class="grad" style="background: linear-gradient(90deg, ${stops.join(', ')})"></i>resolves</span>`);
   }
 
   initControls();

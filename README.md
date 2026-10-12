@@ -28,8 +28,7 @@ from a diatonic chord, or no exit into one, are trimmed.
 ## Using it
 
 - The map lays chords out by category ring and circle-of-fifths angle. Faint
-  lines are named moves. Bright arrows show everything that may follow the
-  last chord, coloured by the rule that permits it.
+  lines are named moves. Bright arrows show everything that fits the insertion point.
 - The progression has an insertion point: the thin lines between chords, and
   before the first and after the last, are clickable. The active one shows a
   dashed slot.
@@ -41,6 +40,13 @@ from a diatonic chord, or no exit into one, are trimmed.
 - The map is filtered to the insertion point: with chords on both sides only
   chords that can follow the previous one *and* lead into the next one stay lit.
   Solid arrows come out of the previous chord, dashed arrows lead into the next.
+  Arrow colour runs from red (adds tension) through yellow to green (resolves),
+  from a score of what the move resolves minus what it lands on:
+  a tritone collapsing by contrary half steps (+3), each note a half step from
+  the next chord's root, 3rd or 5th (+1), and each note that owes a resolution
+  and pays it: a 7th falling to the 3rd, a sus 4th dropping to the 3rd, a ♭5 or
+  °7 falling a half step (+1 each); landing on a tritone costs 3, on a suspension 1.
+  Hovering a chord, and each row in the list, shows the score and its reasons.
   The two checkboxes under the map toggle each side and reset whenever the
   insertion point moves (previous only at the end, next only at the start, both in
   between). Turning on the other side at the start or end wraps around: "after"
