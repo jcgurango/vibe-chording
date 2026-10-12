@@ -59,11 +59,6 @@ const Audio = (() => {
     }
   }
 
-  // "Pure" form: four equal sines.
-  function playPure(midis, opts) {
-    play(midis.map((midi) => ({ midi, gain: 0.14 })), opts);
-  }
-
   // Voice-led form: root + 5th in the left hand (root louder so the low sine carries), three voices above.
   function playVoicing(voicing, opts) {
     play([
@@ -78,5 +73,5 @@ const Audio = (() => {
     play([{ midi, gain: 0.2 }], { dur: 1.1, ...opts });
   }
 
-  return { playPure, playVoicing, playNote, stopAll, ensure };
+  return { playVoicing, playNote, stopAll, ensure };
 })();

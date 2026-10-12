@@ -3,8 +3,8 @@
  * Theory engine.
  *  - Every chord is a 7th chord (Principle 1).
  *  - The palette is built around a key: diatonic, parallel minor, secondary
- *    dominants + related iis, tritone subs, backdoor (iv -> bVII -> I),
- *    sus dominants, chromatic passing chords.
+ *    dominants + related iis, tritone subs, backdoor (iv -> bVII -> I), the
+ *    Mixolydian bVIImaj7, sus dominants, chromatic passing chords.
  *  - Principle 3 decides whether chord B may follow chord A:
  *      common tones | chromatic step-wise motion | strong root motion.
  *  - Non-diatonic chords with no Principle-3 entry from a diatonic chord or
@@ -76,6 +76,7 @@ const Theory = (() => {
     P('v',    5,  0, 'm7',   'v7',       'minor', 'minor v · related ii of V7/IV'),
     P('bVI',  6, -1, 'maj7', '♭VImaj7',  'minor', 'parallel-minor submediant'),
     P('bVII', 7, -1, 'dom7', '♭VII7',    'minor', 'backdoor dominant · tritone sub of V7/vi'),
+    P('bVIImaj', 7, -1, 'maj7', '♭VIImaj7', 'minor', 'borrowed from Mixolydian'),
     // secondary dominants
     P('V/ii',  6, 0, 'dom7', 'VI7',  'secondary', 'V7 of ii'),
     P('V/iii', 7, 0, 'dom7', 'VII7', 'secondary', 'V7 of iii'),
@@ -125,6 +126,7 @@ const Theory = (() => {
     ['v', 'iv'], ['v', 'V/IV'],
     ['bVI', 'bVII'], ['bVI', 'V'], ['bVI', 'iio'],
     ['bVII', 'I'], ['bVII', 'vi'],
+    ['I', 'bVIImaj'], ['bVIImaj', 'IV'], ['IV', 'bVIImaj'], ['bVIImaj', 'I'],
     // secondary dominants and their related iis
     ['V/ii', 'ii'], ['V/iii', 'iii'], ['V/IV', 'IV'], ['V/V', 'V'], ['V/vi', 'vi'],
     ['I', 'V/IV'], ['I', 'V/ii'], ['I', 'V/V'], ['I', 'V/vi'], ['vi', 'V/ii'], ['iii', 'V/ii'],
@@ -263,13 +265,6 @@ const Theory = (() => {
     return { kept, trimmed };
   }
 
-  // "Pure" root-position form: root in the C3 octave, 3rd 5th 7th stacked above.
-  function pureNotes(chord) {
-    const q = QUALITIES[chord.quality];
-    const root = 48 + chord.rootPc;
-    return [root, root + q.third, root + q.fifth, root + q.seventh];
-  }
-
   return { KEYS, QUALITIES, CATEGORIES, MOVES, DEFAULT_RULES, STEPS,
-    buildPalette, transition, transitionTable, trim, pureNotes, freeOffset, mod12, spellLetter, spellInKey };
+    buildPalette, transition, transitionTable, trim, freeOffset, mod12, spellLetter, spellInKey };
 })();

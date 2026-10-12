@@ -35,8 +35,13 @@
     <svg id="map" role="img" aria-label="Chord map"></svg>
     <div id="tooltip" class="tooltip" hidden></div>
     <div id="toast" class="toast" hidden></div>
+    <div class="filter-bar">
+      <span class="slot-label" id="slot-label"></span>
+      <label title="Keep only chords that can follow this one"><input type="checkbox" id="f-prev"> <span id="f-prev-label"></span></label>
+      <label title="Keep only chords that can lead into this one"><input type="checkbox" id="f-next"> <span id="f-next-label"></span></label>
+    </div>
     <div class="bottom-bar">
-      <div class="map-hint">Click a chord to hear it pure and add it. Lines are named moves; bright arrows are what can follow the last chord.<br>Click a piano key to keep only chords with that note; shift-click to drop chords that have it.</div>
+      <div class="map-hint">Click a chord to try it at the insertion point, double-click (or Enter) to add it. Solid arrows come out of the chord before, dashed arrows lead into the chord after.<br>Click a piano key to keep only chords with that note; shift-click to drop chords that have it.</div>
       <div id="piano" class="piano" aria-label="Note filter"></div>
       <button id="piano-clear" class="piano-clear" hidden>clear notes</button>
     </div>
@@ -52,7 +57,7 @@
       </div>
     </div>
     <ol id="prog" class="prog"></ol>
-    <p class="hint" id="empty-hint">Nothing yet. Pick a chord on the map to start. Clicking a chord here plays it in its voice-led form: root and 5th in the left hand, three voices above with the 3rd and 7th always present. Use / to pin the bass to another note.</p>
+    <p class="hint" id="empty-hint">Nothing yet. Click a chord on the map to hear it voice-led, double-click to add it. Every chord here is voice-led: root and 5th in the left hand, three voices above with the 3rd and 7th always present. The lines between chords are insertion points; use / to pin the bass and ▲ to pin the top note.</p>
   </aside>
 </main>
 

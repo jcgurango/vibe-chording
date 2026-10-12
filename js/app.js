@@ -9,11 +9,15 @@
     rules: { ...Theory.DEFAULT_RULES },
     palette: [], byId: new Map(), trans: new Map(), trimmed: [], pos: new Map(),
     progression: [],   // [{ id, slash, top }] pitch classes pinned in the bass / on top, or null
-    voicings: [],      // parallel to progression
+    cursor: 0,         // insertion point: the progression index a new chord goes in front of
+    ghost: null,       // { id, slash, top } auditioned at the cursor, not yet added
+    filterPrev: false, // keep only chords that can follow the chord before the cursor
+    filterNext: false, // keep only chords that can lead into the chord after the cursor
+    voicings: [],      // parallel to sequence(): the progression with the ghost spliced in
     hover: null,
     playTimer: null,
     filter: new Map(),   // piano filter: pitch class -> 'in' (must have) | 'out' (must not have)
-    pickerIndex: null,   // progression index whose picker is open
+    pickerIndex: null,   // progression index (or 'ghost') whose picker is open
     pickerKind: null,    // 'slash' | 'top'
   };
 
@@ -28,8 +32,6 @@
     return e;
   };
   const key = () => Theory.KEYS[state.keyIdx];
-  const currentEntry = () => state.progression[state.progression.length - 1] ?? null;
-  const current = () => currentEntry()?.id ?? null;
   const transOf = (a, b) => state.trans.get(a + '>' + b);
   const entryBass = (e) => e.slash ?? state.byId.get(e.id).rootPc;
 
@@ -37,10 +39,58 @@
   function transEntries(a, b) {
     return Theory.transition(state.byId.get(a.id), state.byId.get(b.id), state.rules, entryBass(a), entryBass(b));
   }
-  // May chord `id` (on its root) follow the current entry?
-  function transFromCurrent(id) {
-    const cur = currentEntry();
-    return Theory.transition(state.byId.get(cur.id), state.byId.get(id), state.rules, entryBass(cur), state.byId.get(id).rootPc);
+
+  // ---------- insertion point ----------
+  // The progression with the ghost spliced in at the cursor.
+  function sequence() {
+    const seq = state.progression.map((e) => ({ e, ghost: false }));
+    if (state.ghost) seq.splice(state.cursor, 0, { e: state.ghost, ghost: true });
+    return seq;
+  }
+  const seqIndex = (i) => i + (state.ghost && i >= state.cursor ? 1 : 0);
+  const ghostIndex = () => state.cursor;
+
+  // The chord a candidate must follow, if that filter is on. At the start it wraps to the last chord.
+  function prevEntry() {
+    const n = state.progression.length;
+    if (!state.filterPrev || !n) return null;
+    return state.progression[state.cursor > 0 ? state.cursor - 1 : n - 1];
+  }
+  // The chord a candidate must lead into, if that filter is on. At the end it wraps to the first chord.
+  function nextEntry() {
+    const n = state.progression.length;
+    if (!state.filterNext || !n) return null;
+    return state.progression[state.cursor < n ? state.cursor : 0];
+  }
+
+  // Every active check on a candidate entry: [{ dir: 'after' | 'into', other, t }].
+  function checks(cand) {
+    const out = [];
+    const p = prevEntry(), nx = nextEntry();
+    if (p) out.push({ dir: 'after', other: p, t: transEntries(p, cand) });
+    if (nx) out.push({ dir: 'into', other: nx, t: transEntries(cand, nx) });
+    return out;
+  }
+  const legalEntry = (cand) => checks(cand).every((c) => c.t.ok);
+
+  function defaultFilters() {
+    state.filterPrev = state.cursor > 0;
+    state.filterNext = state.cursor < state.progression.length;
+  }
+
+  function setCursor(i) {
+    state.cursor = Math.max(0, Math.min(state.progression.length, i));
+    state.ghost = null;
+    state.pickerIndex = null;
+    defaultFilters();
+    refresh();
+  }
+
+  function refresh() {
+    revoice();
+    updateActive();
+    renderList();
+    renderFilterBar();
   }
 
   // Spell a pitch class in the context of a chord (so the 9th of Db7 is Eb, not D#).
@@ -67,17 +117,20 @@
     state.trans = Theory.transitionTable(kept, state.rules);
     state.pos = Layout.place(kept, key().pc);
     state.progression = state.progression.filter((e) => state.byId.has(e.id));
+    if (state.ghost && !state.byId.has(state.ghost.id)) state.ghost = null;
+    state.cursor = Math.min(state.cursor, state.progression.length);
     revoice();
     renderPiano();
     renderMap();
     renderList();
+    renderFilterBar();
     $('trim-note').textContent = trimmed.length
       ? `Trimmed (no diatonic entry or exit): ${trimmed.map((c) => c.name).join(', ')}`
       : 'Nothing trimmed under these rules.';
   }
 
   function revoice() {
-    const items = state.progression.map((e) => ({ chord: state.byId.get(e.id), bassPc: e.slash, topPc: e.top }));
+    const items = sequence().map(({ e }) => ({ chord: state.byId.get(e.id), bassPc: e.slash, topPc: e.top }));
     state.voicings = Voicing.voiceLead(items, key().pc);
   }
 
@@ -116,7 +169,8 @@
       const roman = svgEl('text', { class: 'roman', y: NODE_R + 13 }, g);
       roman.textContent = c.roman;
       svgEl('circle', { class: 'dot', r: 2.5, cy: -NODE_R - 7 }, g);
-      g.addEventListener('click', () => onPick(c.id));
+      g.addEventListener('click', (ev) => onPick(c.id, ev));
+      g.addEventListener('dblclick', (ev) => { ev.preventDefault(); commitGhost(); });
       g.addEventListener('mouseenter', (ev) => onHover(c.id, ev));
       g.addEventListener('mousemove', (ev) => moveTooltip(ev));
       g.addEventListener('mouseleave', () => onHover(null));
@@ -139,26 +193,37 @@
     return `M ${sx.toFixed(1)} ${sy.toFixed(1)} Q ${cx.toFixed(1)} ${cy.toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}`;
   }
 
-  // Arrows out of the current chord, plus node states.
+  // Node states for the insertion point, plus arrows out of the previous chord
+  // and (dashed) into the next one for every chord that passes both filters.
   function updateActive() {
     layers.active.innerHTML = '';
-    const cur = current();
+    const p = prevEntry(), nx = nextEntry();
+    const anchored = !!(p || nx);
     const inProg = new Set(state.progression.map((e) => e.id));
+    const legal = new Set();
     for (const g of layers.nodes.children) {
       const id = g.dataset.id;
-      g.classList.toggle('current', id === cur);
+      const ok = legalEntry({ id, slash: null });
+      if (ok) legal.add(id);
+      g.classList.toggle('current', !!p && id === p.id);
+      g.classList.toggle('next', !!nx && id === nx.id);
+      g.classList.toggle('ghost', !!state.ghost && id === state.ghost.id);
       g.classList.toggle('in-prog', inProg.has(id));
-      const legal = cur && id !== cur ? transFromCurrent(id).ok : false;
-      g.classList.toggle('legal', !!legal);
-      g.classList.toggle('blocked', !!cur && id !== cur && !legal);
+      g.classList.toggle('legal', anchored && ok);
+      g.classList.toggle('blocked', anchored && !ok);
       g.classList.toggle('filtered', !matchesFilter(state.byId.get(id)));
     }
-    if (!cur) return;
     for (const c of state.palette) {
-      if (c.id === cur) continue;
-      const t = transFromCurrent(c.id);
-      if (!t.ok) continue;
-      svgEl('path', { d: edgePath(cur, c.id, 0.1), 'data-to': c.id, 'data-kind': t.kinds[0] }, layers.active);
+      if (!legal.has(c.id)) continue;
+      const cand = { id: c.id, slash: null };
+      if (p && c.id !== p.id) {
+        const t = transEntries(p, cand);
+        svgEl('path', { d: edgePath(p.id, c.id, 0.1), 'data-node': c.id, 'data-kind': t.kinds[0] }, layers.active);
+      }
+      if (nx && c.id !== nx.id) {
+        const t = transEntries(cand, nx);
+        svgEl('path', { d: edgePath(c.id, nx.id, 0.1), 'data-node': c.id, 'data-kind': t.kinds[0], class: 'into' }, layers.active);
+      }
     }
   }
 
@@ -212,23 +277,62 @@
     updateActive();
   }
 
+  // ---------- insertion filter bar ----------
+  function renderFilterBar() {
+    const n = state.progression.length, c = state.cursor;
+    $('slot-label').textContent = !n ? 'Adding the first chord'
+      : c === 0 ? 'Inserting at the start'
+      : c === n ? 'Adding at the end'
+      : `Inserting between ${c} and ${c + 1}`;
+    const pe = n ? state.progression[c > 0 ? c - 1 : n - 1] : null;
+    const ne = n ? state.progression[c < n ? c : 0] : null;
+    const fp = $('f-prev'), fn = $('f-next');
+    fp.checked = state.filterPrev; fp.disabled = !n;
+    fn.checked = state.filterNext; fn.disabled = !n;
+    $('f-prev-label').textContent = pe ? `after ${entryName(pe)}${c === 0 ? ' (last)' : ''}` : 'after the previous chord';
+    $('f-next-label').textContent = ne ? `into ${entryName(ne)}${c === n ? ' (first)' : ''}` : 'into the next chord';
+  }
+
   // ---------- picking ----------
-  function onPick(id) {
-    const chord = state.byId.get(id);
+  // Single click: audition the chord as a ghost at the cursor. Double click commits it.
+  function onPick(id, ev) {
     stopPlayAll();
-    Audio.playPure(Theory.pureNotes(chord));
     flash(id);
-    const cur = currentEntry();
-    if (cur && !transFromCurrent(id).ok) {
-      toast(`${chord.name} can't follow ${entryName(cur)} under the current rules`);
+    const same = state.ghost?.id === id;
+    if (!same) {
+      state.ghost = { id, slash: null, top: null };
+      state.pickerIndex = null;
+      refresh();
+      scrollToSlot();
+    }
+    // the second click of a double click would only retrigger the same sound
+    if (!(same && ev.detail > 1)) Audio.playVoicing(state.voicings[ghostIndex()]);
+  }
+
+  function commitGhost() {
+    const g = state.ghost;
+    if (!g) return;
+    const bad = checks(g).find((c) => !c.t.ok);
+    if (bad) {
+      const verb = bad.dir === 'after' ? "can't follow" : "can't lead into";
+      toast(`${entryName(g)} ${verb} ${entryName(bad.other)} under the current rules · untick that filter to force it`);
       return;
     }
-    state.progression.push({ id, slash: null, top: null });
-    revoice();
-    updateActive();
-    renderList();
-    const list = $('prog');
-    list.scrollTop = list.scrollHeight;
+    state.progression.splice(state.cursor, 0, g);
+    state.ghost = null;
+    setCursor(state.cursor + 1);
+    scrollToSlot();
+  }
+
+  function discardGhost() {
+    if (!state.ghost) return;
+    state.ghost = null;
+    state.pickerIndex = null;
+    refresh();
+  }
+
+  function scrollToSlot() {
+    $('prog').querySelector('li.slot, li.ghost')?.scrollIntoView({ block: 'nearest' });
   }
 
   function flash(id) {
@@ -243,18 +347,16 @@
     state.hover = id;
     const tip = $('tooltip');
     layers.active.classList.toggle('has-hover', !!id);
-    for (const p of layers.active.children) p.classList.toggle('hovered', p.dataset.to === id);
+    for (const p of layers.active.children) p.classList.toggle('hovered', p.dataset.node === id);
     if (!id) { tip.hidden = true; return; }
     const c = state.byId.get(id);
     const tones = ['root', 'third', 'fifth', 'seventh'].map((f) => c.tones[f].name).join(' ');
     let html = `<b>${c.name}</b><span class="roman">${c.roman}</span><br>${tones}<br><span class="role">${c.catLabel} · ${c.role}</span>`;
-    const cur = currentEntry();
-    if (cur && cur.id !== id) {
-      const t = transFromCurrent(id);
-      const from = entryName(cur);
-      html += t.ok
-        ? `<br><span class="ok">after ${from}: ${t.reasons.join(' · ')}</span>`
-        : `<br><span class="no">can't follow ${from}</span>`;
+    for (const ch of checks({ id, slash: null })) {
+      const other = entryName(ch.other);
+      html += ch.t.ok
+        ? `<br><span class="ok">${ch.dir} ${other}: ${ch.t.reasons.join(' · ')}</span>`
+        : `<br><span class="no">${ch.dir === 'after' ? "can't follow" : "can't lead into"} ${other}</span>`;
     }
     tip.innerHTML = html;
     tip.hidden = false;
@@ -278,56 +380,93 @@
     t.textContent = msg;
     t.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { t.hidden = true; }, 2000);
+    toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
   }
 
   // ---------- progression list ----------
   const FREE_LABEL = { fifth: null, root: null, ninth: '9th emerged', eleventh: '11th emerged' };
 
+  // Cards for the chords, thin clickable gaps between them, and at the cursor
+  // either the ghost card or an empty slot.
   function renderList() {
     const ol = $('prog');
     ol.innerHTML = '';
-    $('empty-hint').hidden = state.progression.length > 0;
-    state.progression.forEach((e, i) => {
-      const c = state.byId.get(e.id);
-      const v = state.voicings[i];
-      const li = document.createElement('li');
-      li.className = `cat-${c.cat}`;
-      li.dataset.index = i;
+    const n = state.progression.length;
+    $('empty-hint').hidden = n > 0;
+    for (let i = 0; i <= n; i++) {
+      if (i === state.cursor) ol.appendChild(state.ghost ? card(state.ghost, 'ghost') : slotItem());
+      else ol.appendChild(gapItem(i));
+      if (i < n) ol.appendChild(card(state.progression[i], i));
+    }
+  }
 
-      const upper = v.upper.map((m) => noteName(m, c)).join(' ');
-      const tag = FREE_LABEL[v.free] ? `<span class="tag">${FREE_LABEL[v.free]}</span>` : '';
-      let row3 = 'start';
-      let warn = false;
-      if (i > 0) {
-        const t = transEntries(state.progression[i - 1], e);
-        if (t.ok) row3 = t.reasons.join(' · ');
-        else { row3 = 'does not satisfy the current rules'; warn = true; }
-        row3 += ` · moves ${v.movement} st`;
+  function gapItem(i) {
+    const li = document.createElement('li');
+    li.className = 'gap';
+    li.title = 'Insert here';
+    li.innerHTML = '<span class="line"></span><span class="plus">+</span><span class="line"></span>';
+    li.addEventListener('click', () => setCursor(i));
+    return li;
+  }
+
+  function slotItem() {
+    const li = document.createElement('li');
+    li.className = 'slot';
+    li.textContent = 'insert here · click a chord on the map to try it, double-click to add it';
+    return li;
+  }
+
+  function card(e, i) {
+    const isGhost = i === 'ghost';
+    const c = state.byId.get(e.id);
+    const seq = sequence();
+    const si = isGhost ? ghostIndex() : seqIndex(i);
+    const v = state.voicings[si];
+    const li = document.createElement('li');
+    li.className = `card cat-${c.cat}` + (isGhost ? ' ghost' : '');
+
+    const upper = v.upper.map((m) => noteName(m, c)).join(' ');
+    const tag = FREE_LABEL[v.free] ? `<span class="tag">${FREE_LABEL[v.free]}</span>` : '';
+    const parts = [];
+    let warn = false;
+    if (isGhost) {
+      for (const ch of checks(e)) {
+        if (ch.t.ok) parts.push(`${ch.dir} ${entryName(ch.other)}: ${ch.t.reasons.join(' · ')}`);
+        else { parts.push(`${ch.dir === 'after' ? "can't follow" : "can't lead into"} ${entryName(ch.other)}`); warn = true; }
       }
-      const slashed = e.slash != null, topped = e.top != null;
-      const topBadge = topped ? `<span class="topnote" title="Pinned top note">▲${spellPc(e.top, c).name}</span>` : '';
-      li.innerHTML = `
-        <div class="row1"><span class="idx">${i + 1}</span><span class="name">${entryName(e)}</span><span class="roman">${c.roman}</span>${topBadge}
-          <button class="slash${slashed ? ' on' : ''}" title="Pin the bass to a note">/</button>
-          <button class="top${topped ? ' on' : ''}" title="Pin the top note">▲</button>
-          <button class="rm" title="Remove">×</button></div>
-        <div class="row2"><span class="bass">${noteName(v.bass, c)} ${noteName(v.bass2, c)}</span><span class="upper">${upper}</span>${tag}${v.home ? `<span class="home">→ ${v.home}</span>` : ''}</div>
-        <div class="row3${warn ? ' warn' : ''}">${row3}</div>`;
-      if (state.pickerIndex === i) li.appendChild(state.pickerKind === 'top' ? topPicker(e, c, i) : slashPicker(e, c, i));
-      li.querySelector('.rm').addEventListener('click', (ev) => { ev.stopPropagation(); removeAt(i); });
-      for (const kind of ['slash', 'top']) {
-        li.querySelector('.' + kind).addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          const open = state.pickerIndex === i && state.pickerKind === kind;
-          state.pickerIndex = open ? null : i;
-          state.pickerKind = open ? null : kind;
-          renderList();
-        });
-      }
-      li.addEventListener('click', () => { stopPlayAll(); Audio.playVoicing(v); pulse(li); });
-      ol.appendChild(li);
-    });
+      if (!parts.length) parts.push(si === 0 ? 'start' : 'unfiltered');
+    } else if (si > 0) {
+      const t = transEntries(seq[si - 1].e, e);
+      if (t.ok) parts.push(t.reasons.join(' · '));
+      else { parts.push('does not satisfy the current rules'); warn = true; }
+    } else parts.push('start');
+    if (si > 0) parts.push(`moves ${v.movement} st`);
+
+    const slashed = e.slash != null, topped = e.top != null;
+    const topBadge = topped ? `<span class="topnote" title="Pinned top note">▲${spellPc(e.top, c).name}</span>` : '';
+    const actions = isGhost
+      ? `<button class="add" title="Add it here (Enter)">add</button><button class="rm" title="Discard (Esc)">×</button>`
+      : `<button class="rm" title="Remove">×</button>`;
+    li.innerHTML = `
+      <div class="row1"><span class="idx">${isGhost ? '+' : i + 1}</span><span class="name">${entryName(e)}</span><span class="roman">${c.roman}</span>${topBadge}
+        <button class="slash${slashed ? ' on' : ''}" title="Pin the bass to a note">/</button>
+        <button class="top${topped ? ' on' : ''}" title="Pin the top note">▲</button>${actions}</div>
+      <div class="row2"><span class="bass">${noteName(v.bass, c)} ${noteName(v.bass2, c)}</span><span class="upper">${upper}</span>${tag}${v.home ? `<span class="home">→ ${v.home}</span>` : ''}</div>
+      <div class="row3${warn ? ' warn' : ''}">${parts.join(' · ')}</div>`;
+    if (state.pickerIndex === i) li.appendChild(state.pickerKind === 'top' ? topPicker(e, c, i) : slashPicker(e, c, i));
+    li.querySelector('.rm').addEventListener('click', (ev) => { ev.stopPropagation(); isGhost ? discardGhost() : removeAt(i); });
+    li.querySelector('.add')?.addEventListener('click', (ev) => { ev.stopPropagation(); commitGhost(); });
+    for (const kind of ['slash', 'top']) {
+      li.querySelector('.' + kind).addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const open = state.pickerIndex === i && state.pickerKind === kind;
+        state.pickerIndex = open ? null : i;
+        state.pickerKind = open ? null : kind;
+        renderList();
+      });
+    }
+    li.addEventListener('click', () => { stopPlayAll(); Audio.playVoicing(v); pulse(li); });
+    return li;
   }
 
   // Bass-note picker: chord tones first, then every other pitch class.
@@ -339,7 +478,7 @@
       const b = document.createElement('button');
       b.className = `chip ${cls}` + ((e.slash ?? null) === pc ? ' on' : '');
       b.textContent = label;
-      b.addEventListener('click', () => setSlash(i, pc));
+      b.addEventListener('click', () => setPin(i, 'slash', pc));
       return b;
     };
     const tonesRow = document.createElement('div');
@@ -360,18 +499,6 @@
     return box;
   }
 
-  function setSlash(i, pc) { setPin(i, 'slash', pc); }
-  function setTop(i, pc) { setPin(i, 'top', pc); }
-
-  function setPin(i, field, pc) {
-    state.progression[i][field] = pc;
-    revoice();
-    updateActive();
-    renderList();
-    stopPlayAll();
-    Audio.playVoicing(state.voicings[i]);
-  }
-
   // Top-note picker: only notes the upper voices may hold under Principle 2.
   const FN_SHORT = { third: '3', seventh: '7', fifth: '5', root: 'R', ninth: '9', eleventh: '11' };
   function topPicker(e, c, i) {
@@ -384,7 +511,7 @@
       const b = document.createElement('button');
       b.className = 'chip tone' + ((e.top ?? null) === pc ? ' on' : '');
       b.textContent = label;
-      b.addEventListener('click', () => setTop(i, pc));
+      b.addEventListener('click', () => setPin(i, 'top', pc));
       row.appendChild(b);
     };
     chip('free', null);
@@ -396,6 +523,15 @@
     return box;
   }
 
+  // Pin the bass or top note of a progression entry or the ghost, then play it.
+  function setPin(i, field, pc) {
+    const target = i === 'ghost' ? state.ghost : state.progression[i];
+    target[field] = pc;
+    refresh();
+    stopPlayAll();
+    Audio.playVoicing(state.voicings[i === 'ghost' ? ghostIndex() : seqIndex(i)]);
+  }
+
   function pulse(li) {
     li.classList.add('playing');
     setTimeout(() => li.classList.remove('playing'), 500);
@@ -403,17 +539,27 @@
 
   function removeAt(i) {
     state.progression.splice(i, 1);
+    if (state.cursor > i) state.cursor -= 1;
     state.pickerIndex = null;
-    revoice();
-    updateActive();
-    renderList();
+    defaultFilters();
+    refresh();
   }
 
+  function clearAll() {
+    stopPlayAll();
+    Audio.stopAll();
+    state.progression = [];
+    state.ghost = null;
+    state.pickerIndex = null;
+    setCursor(0);
+  }
+
+  // Plays the sequence, ghost included, so an audition is heard in context.
   function playAll() {
     stopPlayAll();
-    if (!state.progression.length) return;
+    if (!state.voicings.length) return;
     Audio.ensure();
-    const items = [...$('prog').children];
+    const items = [...$('prog').querySelectorAll('li.card')];
     state.voicings.forEach((v, i) => {
       Audio.playVoicing(v, { when: i * STEP_SECONDS, dur: STEP_SECONDS + 0.5 });
     });
@@ -453,10 +599,20 @@
       });
     }
 
+    $('f-prev').addEventListener('change', (ev) => { state.filterPrev = ev.target.checked; updateActive(); renderList(); });
+    $('f-next').addEventListener('change', (ev) => { state.filterNext = ev.target.checked; updateActive(); renderList(); });
+
     $('play-all').addEventListener('click', playAll);
     $('piano-clear').addEventListener('click', clearNotes);
     $('undo').addEventListener('click', () => { if (state.progression.length) removeAt(state.progression.length - 1); });
-    $('clear').addEventListener('click', () => { stopPlayAll(); Audio.stopAll(); state.progression = []; state.pickerIndex = null; revoice(); updateActive(); renderList(); });
+    $('clear').addEventListener('click', clearAll);
+
+    document.addEventListener('keydown', (ev) => {
+      const tag = ev.target.tagName;
+      if (tag === 'SELECT' || tag === 'TEXTAREA' || (tag === 'INPUT' && ev.target.type !== 'checkbox')) return;
+      if (ev.key === 'Enter' && state.ghost) { ev.preventDefault(); commitGhost(); }
+      else if (ev.key === 'Escape' && state.ghost) discardGhost();
+    });
 
     const legend = $('legend');
     for (const [cat, label] of Object.entries(Theory.CATEGORIES)) {

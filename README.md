@@ -20,8 +20,8 @@ in a browser (no build step, no dependencies).
 ## Palette
 
 Built around the selected key: the 7 diatonic chords, the 7 chords of the
-parallel minor, secondary dominants and their related iis, tritone
-substitutions, the backdoor move (iv7 → ♭VII7 → I), sus dominants and
+parallel minor plus ♭VIImaj7 borrowed from Mixolydian, secondary dominants
+and their related iis, tritone substitutions, the backdoor move (iv7 → ♭VII7 → I), sus dominants and
 chromatic passing dim7 chords. Non-diatonic chords with no Principle 3 entry
 from a diatonic chord, or no exit into one, are trimmed.
 
@@ -30,11 +30,26 @@ from a diatonic chord, or no exit into one, are trimmed.
 - The map lays chords out by category ring and circle-of-fifths angle. Faint
   lines are named moves. Bright arrows show everything that may follow the
   last chord, coloured by the rule that permits it.
-- Click a chord on the map to hear it pure (root-position sines) and add it.
+- The progression has an insertion point: the thin lines between chords, and
+  before the first and after the last, are clickable. The active one shows a
+  dashed slot.
+- Click a chord on the map to try it: it appears as a ghost in the slot, voiced
+  in context, and plays. Double-click it (or press Enter, or click "add") to
+  add it; the insertion point moves to just after it. Esc or × discards the ghost.
+  The ghost takes `/` and `▲` pins like any other chord, so you can audition
+  inversions and top notes before committing.
+- The map is filtered to the insertion point: with chords on both sides only
+  chords that can follow the previous one *and* lead into the next one stay lit.
+  Solid arrows come out of the previous chord, dashed arrows lead into the next.
+  The two checkboxes under the map toggle each side and reset whenever the
+  insertion point moves (previous only at the end, next only at the start, both in
+  between). Turning on the other side at the start or end wraps around: "after"
+  at the start filters on the last chord, "into" at the end filters on the first,
+  which is how you tighten a loop.
 - Click a chord in the progression list to hear it voice-led. The list shows
   the left hand (root + 5th), the three upper voices, which extension emerged, and why the
   transition is allowed.
-- Play runs the whole progression voice-led.
+- Play runs the whole sequence voice-led, ghost included.
 - The piano under the map is a note filter. Click a key to require that note
   (chords without it are greyed out); shift-click to exclude it (chords with
   it are greyed out). Each note sounds when selected; clicking again clears it.

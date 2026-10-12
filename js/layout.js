@@ -31,8 +31,10 @@ const Layout = (() => {
       const diatonic = c.cat === 'diatonic';
       const jitterR = diatonic ? 0 : (h % 25) - 12;
       const jitterA = diatonic ? 0 : (((h >> 8) % 9) - 4) * 0.8;
-      const angle = -90 + f * 30 + (i - (n - 1) / 2) * 17 + jitterA;
-      const r = ring + jitterR;
+      // chords sharing a ring and a root fan out in angle and radius
+      const spread = i - (n - 1) / 2;
+      const angle = -90 + f * 30 + spread * 20 + jitterA;
+      const r = ring + jitterR + spread * 26;
       const a = (angle * Math.PI) / 180;
       pos.set(c.id, { x: r * Math.cos(a), y: r * Math.sin(a) });
     }
