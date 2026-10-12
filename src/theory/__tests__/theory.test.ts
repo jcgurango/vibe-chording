@@ -1,89 +1,86 @@
-import { describe, it, expect } from 'vitest';
-import { parseNote, transpose, I, invert, noteName, pcOf } from '../pitch';
-import { chordName } from '../chords';
-import { palette, type Home, pairingStrength } from '../palette';
-import { pathsInto, nearTwins } from '../moves';
-import { voice, voiceSequence } from '../voicing';
-import { scorePath, type Placed } from '../scoring';
+import { describe, expect, it } from 'vitest'
+import { chordName, chordTones } from '../chords'
+import { applyMove, constellationFor } from '../moves'
+import { C_MAJOR, paletteFor } from '../palette'
+import { pc } from '../pitch'
+import { voice } from '../voicing'
 
-const C: Home = { root: parseNote('C'), mode: 'major' };
-const pal = palette(C);
-const byId = (id: string) => pal.find(s => s.id === id)!.chord;
-
-describe('spelling', () => {
-  it('spells the palette against C', () => {
-    expect(pal.map(s => chordName(s.chord))).toEqual([
+describe('palette', () => {
+  it('names the 18 chords of a C major home', () => {
+    const names = paletteFor(C_MAJOR).map((c) => c.name)
+    expect(names).toEqual([
       'Cmaj7', 'Dm7', 'Em7', 'Fmaj7', 'G7', 'Am7', 'Bø7',
       'Cm7', 'Dø7', 'E♭maj7', 'Fm7', 'A♭maj7', 'B♭7',
       'Gm7', 'B♭maj7', 'D♭maj7', 'F♯ø7', 'F7',
-    ]);
-  });
-  it('spells the palette against E', () => {
-    const E = palette({ root: parseNote('E'), mode: 'major' });
-    expect(E.map(s => chordName(s.chord)).slice(7)).toEqual(['Em7', 'F♯ø7', 'Gmaj7', 'Am7', 'Cmaj7', 'D7', 'Bm7', 'Dmaj7', 'Fmaj7', 'A♯ø7', 'A7']);
-  });
-  it('moves by spelled intervals and simplifies awkward results', () => {
-    expect(noteName(transpose(parseNote('A'), invert(I.m2)))).toBe('G♯');
-    expect(noteName(transpose(parseNote('A'), invert(I.A1)))).toBe('A♭');
-    expect(noteName(transpose(parseNote('B'), I.A1))).toBe('C');
-    expect(pcOf(transpose(parseNote('G♭'), I.P5))).toBe(1);
-  });
-});
+    ])
+  })
+
+  it('transposes to another home with sensible spelling', () => {
+    const names = paletteFor({ letter: 6, acc: -1 }).map((c) => c.name)
+    expect(names.slice(0, 7)).toEqual(['B♭maj7', 'Cm7', 'Dm7', 'E♭maj7', 'F7', 'Gm7', 'Aø7'])
+  })
+})
 
 describe('moves', () => {
-  const names = (J: string, L: string) => pathsInto(byId(J), byId(L), C, pal).map(p => `${p.kind}: ${p.chords.map(chordName).join(' ')}`);
+  const byName = Object.fromEntries(paletteFor(C_MAJOR).map((c) => [c.name, c.chord]))
+  const names = (chords: ReturnType<typeof applyMove>) => chords.map(chordName)
 
   it('produces the catalogue examples into Am7', () => {
-    const n = names('IV', 'vi');
-    expect(n).toContain('dominant: E7♭9');
-    expect(n).toContain('ii–V: Bø7 E7♭9');
-    expect(n).toContain('tritone sub: B♭7');
-    expect(n).toContain('slide: B♭maj7');
-    expect(n).toContain('diminished: G♯dim7');
-    expect(n).toContain('pre-echo: Cmaj7');
-  });
-  it('walks diatonically from I to IV and passes chromatically from iii to ii', () => {
-    expect(names('I', 'IV')).toContain('diatonic walk: Dm7 Em7');
-    expect(names('iii', 'ii')).toContain('chromatic passing: E♭dim7');
-    expect(names('I', 'IV')).toContain('dominant: C7');
-  });
-  it('flips quality and walks the bass', () => {
-    expect(names('vi', 'ii')).toContain('dominant: A7♭9'); // the flip and the dominant are one chord; the dominant keeps the name
-    expect(names('IV', 'I')).toContain('quality flip: Fm7');
-    expect(names('v', 'i')).toContain('flip + bass walk: G7♭9 G7♭9/A G7♭9/B');
-  });
-  it('side-slips on a repeat', () => {
-    expect(names('ii', 'ii')).toContain('side-slip: D♭maj7');
-  });
-  it('finds near-twins', () => {
-    expect(nearTwins(byId('vi'), true).map(chordName)).toEqual(['Cmaj7', 'Fmaj7']);
-    expect(nearTwins(byId('I'), true).map(chordName)).toEqual(['Am7', 'Em7']);
-  });
-  it('lists common motions', () => {
-    expect(pairingStrength(byId('V'), byId('I'), C, pal)).toBe(1);
-    expect(pairingStrength(byId('IV'), byId('V'), C, pal)).toBeGreaterThan(0.5);
-  });
-});
+    const am = byName['Am7']
+    expect(names(applyMove('dominant', am))).toEqual(['E7'])
+    expect(names(applyMove('ii-V', am))).toEqual(['Bø7', 'E7'])
+    expect(names(applyMove('tritone', am))).toEqual(['B♭7'])
+    expect(names(applyMove('slide', am))).toEqual(['B♭maj7'])
+    expect(names(applyMove('diminished', am))).toEqual(['G♯dim7'])
+  })
+
+  it('produces the catalogue examples into Cmaj7', () => {
+    const c = byName['Cmaj7']
+    expect(names(applyMove('backdoor', c))).toEqual(['B♭7'])
+    expect(names(applyMove('plagal', c))).toEqual(['Fm7'])
+    expect(names(applyMove('ii-V', c))).toEqual(['Dm7', 'G7'])
+    expect(names(applyMove('diminished', c))).toEqual(['Bdim7'])
+  })
+
+  it('spells the dominant of Bø7 as F♯7', () => {
+    expect(names(applyMove('dominant', byName['Bø7']))).toEqual(['F♯7'])
+  })
+
+  it('reuses palette chords and chains the ii into the V', () => {
+    const palette = paletteFor(C_MAJOR)
+    const home = palette[0]
+    const resolve = (c: { root: number; quality: string }) =>
+      palette.find((p) => p.chord.root === c.root && p.chord.quality === c.quality)?.id
+    const k = constellationFor(home.chord, home.id, resolve)
+    // Dm7, G7, Fm7, B♭7 and D♭maj7 all live in the palette already; the rest materialise.
+    expect(k.nodes.map((n) => chordName(n.chord)).sort()).toEqual(['Bdim7', 'D♭7'])
+    expect(k.links).toContainEqual({ from: 'ii7', to: 'V7', kind: 'ii-V', label: 'ii–V' })
+    expect(k.links).toContainEqual({ from: 'V7', to: 'Imaj7', kind: 'dominant', label: 'dominant' })
+    expect(k.links).toContainEqual({ from: '♭VII7', to: 'Imaj7', kind: 'backdoor', label: 'backdoor' })
+  })
+})
 
 describe('voicing', () => {
-  it('keeps shapes within the window and moves little', () => {
-    const { voicings, costs } = voiceSequence(['ii', 'V', 'I'].map(byId), null);
-    for (const v of voicings) {
-      expect(v.upper[0]).toBeGreaterThanOrEqual(55);
-      expect(v.upper[v.upper.length - 1]).toBeLessThanOrEqual(79);
-    }
-    expect(Math.max(...costs)).toBeLessThan(10);
-  });
-});
+  it('puts the root in the bass and 3-5-7-9 in a close shape', () => {
+    const v = voice({ root: 0, quality: 'maj7' })
+    expect(pc(v.bass)).toBe(0)
+    expect(v.bass).toBeGreaterThanOrEqual(36)
+    expect(v.bass).toBeLessThan(48)
+    expect(v.upper.map(pc).sort((a, b) => a - b)).toEqual([2, 4, 7, 11])
+    const span = v.upper[v.upper.length - 1] - v.upper[0]
+    expect(span).toBeLessThan(12)
+    expect(v.upper[0]).toBeGreaterThanOrEqual(55)
+    expect(v.upper[v.upper.length - 1]).toBeLessThanOrEqual(79)
+  })
 
-describe('scoring', () => {
-  it('ranks the dominant into IV above its bass walk', () => {
-    const start: Placed = { chord: byId('I'), weight: 'skeletal', kind: 'bare', voicing: voice(byId('I'), null) };
-    const ctx = { home: C, pal, history: [start], homeDial: 0 };
-    const scored = pathsInto(byId('I'), byId('IV'), C, pal).map(p => scorePath(p, ctx)).sort((a, b) => b.total - a.total);
-    const kinds = scored.map(s => `${s.path.kind} ${s.path.chords.map(chordName).join(' ')} ${s.total.toFixed(3)}`);
-    const dom = kinds.findIndex(k => k.startsWith('dominant C7'));
-    const walk = kinds.findIndex(k => k.startsWith('bass walk'));
-    expect(dom, kinds.join('\n')).toBeLessThan(walk);
-  });
-});
+  it('voices every palette chord inside the window', () => {
+    for (const c of paletteFor(C_MAJOR)) {
+      const v = voice(c.chord)
+      expect(v.upper).toHaveLength(4)
+      expect(v.upper[0]).toBeGreaterThanOrEqual(55)
+      expect(v.upper[3]).toBeLessThanOrEqual(79)
+      const tones = new Set([...chordTones(c.chord), (c.chord.root + 2) % 12])
+      for (const m of v.upper) expect(tones.has(pc(m))).toBe(true)
+    }
+  })
+})

@@ -1,116 +1,117 @@
-// player.ts — plays voicings. A sampled piano loads in the background on first use;
-// a small Web Audio synth covers the gap and any failure to load.
+import { midiToFreq } from '../theory/pitch'
+import type { Voicing } from '../theory/voicing'
 
-import { SplendidGrandPiano } from 'smplr';
-import type { Voicing } from '../theory/voicing';
+/**
+ * A small sine-wave player on top of the Web Audio API.
+ * The context is created lazily on the first play, which keeps browsers'
+ * autoplay rules happy because that first play comes from a click.
+ *
+ * Only one chord sounds at a time: starting a new one releases the old one.
+ */
 
-export type Sound = 'synth' | 'loading' | 'piano';
-export type PlayEvent = { voicing: Voicing; duration: number; velocity?: number };
+let ctx: AudioContext | null = null
+let master: GainNode | null = null
 
-type Listener = (s: Sound) => void;
-
-class Player {
-  private ctx: AudioContext | null = null;
-  private piano: ReturnType<typeof SplendidGrandPiano> | null = null;
-  private master: GainNode | null = null;
-  private sound: Sound = 'synth';
-  private listeners = new Set<Listener>();
-  private stops: Array<(t?: number) => void> = [];
-  private generation = 0;
-
-  subscribe(fn: Listener) { this.listeners.add(fn); fn(this.sound); return () => { this.listeners.delete(fn); }; }
-
-  private setSound(s: Sound) { this.sound = s; this.listeners.forEach(l => l(s)); }
-
-  private ensure(): AudioContext {
-    if (this.ctx) {
-      if (this.ctx.state === 'suspended') void this.ctx.resume();
-      return this.ctx;
-    }
-    const ctx = new AudioContext();
-    this.ctx = ctx;
-    const master = ctx.createGain();
-    master.gain.value = 0.9;
-    const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -18;
-    comp.ratio.value = 4;
-    master.connect(comp).connect(ctx.destination);
-    this.master = master;
-    this.setSound('loading');
-    const piano = SplendidGrandPiano(ctx, { destination: master, volume: 100 });
-    piano.load.then(() => { this.piano = piano; this.setSound('piano'); }).catch(() => this.setSound('synth'));
-    return ctx;
+function ensureContext(): { ctx: AudioContext; master: GainNode } {
+  if (!ctx) {
+    ctx = new AudioContext()
+    master = ctx.createGain()
+    master.gain.value = 0.6
+    master.connect(ctx.destination)
   }
-
-  stopAll() {
-    const t = this.ctx?.currentTime ?? 0;
-    this.stops.forEach(s => s(t));
-    this.stops = [];
-    this.generation++;
-  }
-
-  // Play a sequence of voicings back to back, starting now.
-  play(events: PlayEvent[]) {
-    const ctx = this.ensure();
-    this.stopAll();
-    let t = ctx.currentTime + 0.03;
-    for (const ev of events) {
-      this.chord(ctx, ev, t);
-      t += ev.duration;
-    }
-  }
-
-  private chord(ctx: AudioContext, ev: PlayEvent, at: number) {
-    const dur = ev.duration * 0.97;
-    const vel = ev.velocity ?? 68;
-    const notes = [[ev.voicing.bass, vel], ...ev.voicing.upper.map((n, i) => [n, i === ev.voicing.upper.length - 1 ? vel + 4 : vel - 8])];
-    for (const [midi, v] of notes) {
-      if (this.piano) this.stops.push(this.piano.start({ note: midi, velocity: v, time: at, duration: dur }));
-      else this.synthNote(ctx, midi, v / 127, at, dur);
-    }
-  }
-
-  private synthNote(ctx: AudioContext, midi: number, vel: number, at: number, dur: number) {
-    const master = this.master!;
-    const freq = 440 * Math.pow(2, (midi - 69) / 12);
-    const g = ctx.createGain();
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = Math.min(6000, 600 + freq * 3);
-    g.connect(lp).connect(master);
-    const peak = 0.16 * vel * (midi < 50 ? 1.3 : 1);
-    g.gain.setValueAtTime(0, at);
-    g.gain.linearRampToValueAtTime(peak, at + 0.012);
-    g.gain.exponentialRampToValueAtTime(peak * 0.45, at + 0.35);
-    g.gain.exponentialRampToValueAtTime(peak * 0.25, at + dur);
-    g.gain.exponentialRampToValueAtTime(0.0005, at + dur + 0.35);
-    const oscs: OscillatorNode[] = [];
-    const mk = (type: OscillatorType, mult: number, gain: number) => {
-      const o = ctx.createOscillator();
-      o.type = type;
-      o.frequency.value = freq * mult;
-      const og = ctx.createGain();
-      og.gain.value = gain;
-      o.connect(og).connect(g);
-      o.start(at);
-      o.stop(at + dur + 0.4);
-      oscs.push(o);
-    };
-    mk('triangle', 1, 1);
-    mk('sine', 2, 0.18);
-    if (midi < 50) mk('sine', 1, 0.6);
-    const gen = this.generation;
-    this.stops.push((t?: number) => {
-      if (this.generation !== gen) return;
-      const now = t ?? ctx.currentTime;
-      try {
-        g.gain.cancelScheduledValues(now);
-        g.gain.setValueAtTime(g.gain.value, now);
-        g.gain.exponentialRampToValueAtTime(0.0005, now + 0.12);
-        oscs.forEach(o => o.stop(now + 0.15));
-      } catch { /* already stopped */ }
-    });
-  }
+  if (ctx.state === 'suspended') void ctx.resume()
+  return { ctx, master: master! }
 }
 
-export const player = new Player();
+interface NoteOptions {
+  gain: number
+  attack: number
+}
+
+interface Voice {
+  osc: OscillatorNode
+  env: GainNode
+  gain: number
+}
+
+function startNote(midi: number, when: number, opts: NoteOptions): Voice {
+  const { ctx, master } = ensureContext()
+  const osc = ctx.createOscillator()
+  osc.type = 'sine'
+  osc.frequency.value = midiToFreq(midi)
+
+  const env = ctx.createGain()
+  env.gain.setValueAtTime(0, when)
+  env.gain.linearRampToValueAtTime(opts.gain, when + opts.attack)
+
+  osc.connect(env).connect(master)
+  osc.start(when)
+  return { osc, env, gain: opts.gain }
+}
+
+function releaseVoice(v: Voice, when: number, release: number) {
+  const g = v.env.gain
+  g.cancelScheduledValues(when)
+  g.setValueAtTime(g.value, when)
+  g.exponentialRampToValueAtTime(0.0001, when + release)
+  v.osc.stop(when + release + 0.05)
+}
+
+/** A chord that is currently sounding. */
+export interface SoundingChord {
+  release(release?: number): void
+}
+
+let current: SoundingChord | null = null
+
+export interface PlayOptions {
+  /** Seconds the previous chord takes to fade when this one starts. */
+  crossfade?: number
+  /** Seconds the chord takes to fade when released. */
+  release?: number
+  /** Seconds before the chord releases itself if nothing else cuts it. */
+  maxHold?: number
+}
+
+export function playVoicing(
+  v: Voicing,
+  { crossfade = 0.12, release = 0.6, maxHold = 2 }: PlayOptions = {},
+): SoundingChord {
+  const { ctx } = ensureContext()
+  const now = ctx.currentTime + 0.01
+
+  current?.release(crossfade)
+
+  const voices: Voice[] = [
+    // Bass: a touch louder, since a sine has no harmonics to carry it.
+    startNote(v.bass, now, { gain: 0.35, attack: 0.02 }),
+    // Upper shape: a very slight strum so the voices separate.
+    ...v.upper.map((m, i) => startNote(m, now + i * 0.012, { gain: 0.16, attack: 0.03 })),
+  ]
+
+  let released = false
+  const sounding: SoundingChord = {
+    release(r = release) {
+      if (released) return
+      released = true
+      const t = ctx.currentTime
+      for (const voice of voices) releaseVoice(voice, t, r)
+      if (current === sounding) current = null
+    },
+  }
+
+  const timer = window.setTimeout(() => sounding.release(), maxHold * 1000)
+  const originalRelease = sounding.release
+  sounding.release = (r) => {
+    window.clearTimeout(timer)
+    originalRelease(r)
+  }
+
+  current = sounding
+  return sounding
+}
+
+/** Release whatever is sounding now. */
+export function stopAll(release = 0.4) {
+  current?.release(release)
+}

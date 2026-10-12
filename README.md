@@ -1,86 +1,37 @@
-# Skeleton and Moves — a map of chord thinking
+# Chord Sky
 
-A browser tool for building loop progressions on the paradigm in
-*Skeleton and Moves: A Catalogue of Chord Thinking* (the document in this folder).
+A browser tool built on *Skeleton and Moves: A Catalogue of Chord Thinking*.
 
-## Run it
+The sky shows the skeletal palette for a major home: home at the centre, the
+diatonic chords on an inner ring, chords borrowed from the parallel minor on the
+next ring, and chords from other parallel modes on the outer ring. Angle follows
+the root like a clock, so Fm7 sits outside Fmaj7 and Cm7 sits above Cmaj7.
+
+Every landing-framed move from the catalogue is applied to every palette chord,
+and the whole web is drawn at once:
+
+- a move chord that already lives in the palette gets an arrow from its star
+- a move chord outside the palette materialises as a hollow, italic star,
+  shared by every landing it serves and settled among them by a force layout
+- a two-chord move (ii–V) is chained, ii into V into the landing
+
+Arrows are coloured by move and materialised stars by chord quality. Hover or
+click a chord to light up what points at it and what it points at. The legend
+at top right toggles each move's arrows. Click a chord to hear it as a
+sine-wave voicing (root in the bass, 3-5-7-9 in a close shape around middle C).
+Click the background or press Escape to clear the selection.
+
+## Run
 
 ```
 npm install
-npm run dev        # http://localhost:5173
-npm test           # theory tests (vitest)
-npm run build      # typecheck + production build into dist/
+npm run dev
 ```
 
-## The map
+`npm test` runs the theory tests. `npm run build` type-checks and bundles.
 
-- **Columns are steps, rows are the skeletal chords.** Every column holds the whole palette of
-  the home key: seven diatonic chords, six borrowed from the parallel minor, five from other
-  parallel modes (a minor home has its short list of seven). The first column keeps the
-  catalogue's order and lights the usual starting places: I, IV, vi and ii. Every later column
-  is sorted by score, best next chord on top, so the groups are no longer in blocks; the stripe
-  color on each card still says which group it belongs to.
-- **Choosing a chord duplicates the palette to its right.** The chosen chord stays highlighted in
-  its column and the next column becomes the frontier: wires fan out from the chosen chord to
-  every chord it could lead to.
-- **Each wire is a way in.** The plain wire is the direct motion. Wires with chips are moves:
-  the chips are the chords that lead there (dominant, ii–V, tritone sub, slide, diminished,
-  backdoor, plagal, diatonic walk, chromatic passing, pre-echo). Gold wires are variations of the
-  chord being left (quality flip, bass walk, line cliché, side-slip, sus delay). Pink wires are
-  deceptive landings: a dominant-type move aimed at the near-twin of the chord it lands on.
-- **Opacity is the score.** Every wire is scored on the catalogue's dimensions (right fit, left
-  fit, smoothness, tension fit, distance from home, pattern, variety; Room only knows that a
-  longer move needs more space until there is rhythm). Direct wires are scaled against direct
-  wires and moves against moves, the catalogue's "compare within kind", and a chord's place in
-  the column comes from its direct motion. Hover a wire for the breakdown. Each row shows its
-  best few moves; "+N more" shows the rest.
-- **Click hears, shift+click chooses.** Clicking a chord, wire or chip plays it voice-led from the
-  last chosen chord: a bass on the root (or the slash note) and a close-position upper shape
-  that takes the nearest playable shape, per the voice-leading chapter. Shift+click appends the
-  path to the progression. Shift+clicking a chord in an earlier column re-picks that step and
-  drops what came after. Backspace undoes the last step, space plays the whole progression.
-- **Controls.** Home root (the progression transposes with it) and mode; the "stay home ↔ wander"
-  dial is the catalogue's distance-from-home taste setting; moves per chord; "roads not taken"
-  draws faint direct wires in earlier gaps; zoom.
-- **Sound.** A sampled piano loads on the first click; a small synth covers it until then.
+## Layout
 
-## Code
-
-| File | What it holds |
-| --- | --- |
-| `src/theory/pitch.ts` | Spelled notes and intervals, so ♭II is D♭ and ♯iv is F♯ |
-| `src/theory/chords.ts` | Chord qualities, names, pitch classes, and the upper-shape tones each quality contributes |
-| `src/theory/palette.ts` | The skeletal palettes, the common-motion (pairing) tables, tension levels, home scale helpers |
-| `src/theory/moves.ts` | The move recipes, variations, deceptive landings; `pathsInto(jumpoff, landing)` |
-| `src/theory/voicing.ts` | Two-layer voicing with the movement / center / top-note / bad-shape costs |
-| `src/theory/scoring.ts` | The eight dimensions, their weights, and the opacity scale |
-| `src/audio/player.ts` | Piano samples (smplr) with a synth fallback |
-| `src/ui/layout.ts` | Columns, rows and wires for the SVG map |
-| `src/ui/Map.tsx`, `App.tsx`, `Tooltip.tsx` | Rendering, state, interaction |
-
-All strengths, weights and costs are the catalogue's starting guesses and live in plain tables
-meant to be tuned by ear.
-
-## The bench
-
-The catalogue's examples are encoded in `src/bench/repertoire.ts` as skeletons with the move
-the document reads into each chord. `src/bench/bench.ts` walks each example the way the map
-would: at every gap it ranks the chord the song chose among all next chords, and the move the
-song used among all moves into that chord.
-
-```
-npm run bench            # the table, one line per gap, at the default home dial (-0.5)
-npm run bench -- 0.5     # at another dial setting
-npx tsx scripts/tune.ts  # sweep the knobs in scoring.ts TUNING and print the best settings
-```
-
-`src/bench/__tests__/repertoire.test.ts` asserts tendencies, not determinism: most chosen
-chords in the top five of eighteen, most moves in the top three. The knobs that were tuned
-against it are `TUNING` in `src/theory/scoring.ts`, `STRENGTH` in `src/theory/moves.ts` and the
-pairing tables in `src/theory/palette.ts`.
-
-## Not yet
-
-- Rhythm, slots and a player, so Room and the beat side of tension fit are placeholders.
-- Promotion (holding a move for a full slot) and loop-wrap scoring against the first chord.
-- Pairing strengths for a minor home are a first sketch; unlisted pairs fall back to smoothness.
+- `src/theory/` — pitch, spelling, chord qualities, the palette, moves, and voicing
+- `src/audio/` — the Web Audio sine player
+- `src/ui/` — the starfield, the chord sky with its constellations, and the HUD

@@ -1,107 +1,48 @@
-// chords.ts — chord qualities, naming, and the notes a chord contributes to a voicing.
+import { spellingName, spellPc, type Spelling } from './spelling'
 
-import { I, type Interval, type SpelledNote, noteName, pcOf, mod, transpose, parseNote } from './pitch';
+/** Chord qualities as intervals above the root, in semitones. */
+export type Quality = 'maj7' | 'm7' | '7' | 'ø7' | 'dim7' | 'maj' | 'min'
 
-export type Quality =
-  | 'maj7' | 'm7' | '7' | 'ø7' | 'dim7'
-  | 'maj' | 'min' | '7sus4' | 'aug' | '6' | 'mMaj7';
-
-export type Chord = {
-  root: SpelledNote;
-  quality: Quality;
-  bass?: SpelledNote;      // slash bass, when it differs from the root
-  flat9?: boolean;         // dominant with ♭9 (aimed at a minor landing)
-};
-
-type QualityDef = {
-  symbol: string;
-  tones: number[];         // semitones above the root, full chord
-  shape: number[];         // what the upper layer plays once the bass has the root
-  family: 'major' | 'minor' | 'dominant' | 'diminished' | 'other';
-};
-
-// Upper shapes follow the voicing chapter: the 3rd and 7th are always present, the root is
-// left to the bass and the 9th takes its place, and on dominants the 13th replaces the 5th.
-export const QUALITIES: Record<Quality, QualityDef> = {
-  maj7:  { symbol: 'maj7',  tones: [0, 4, 7, 11],  shape: [4, 7, 11, 2],  family: 'major' },
-  m7:    { symbol: 'm7',    tones: [0, 3, 7, 10],  shape: [3, 7, 10, 2],  family: 'minor' },
-  '7':   { symbol: '7',     tones: [0, 4, 7, 10],  shape: [4, 10, 2, 9],  family: 'dominant' },
-  'ø7':  { symbol: 'ø7',    tones: [0, 3, 6, 10],  shape: [0, 3, 6, 10],  family: 'minor' },
-  dim7:  { symbol: 'dim7',  tones: [0, 3, 6, 9],   shape: [0, 3, 6, 9],   family: 'diminished' },
-  maj:   { symbol: '',      tones: [0, 4, 7],      shape: [0, 4, 7],      family: 'major' },
-  min:   { symbol: 'm',     tones: [0, 3, 7],      shape: [0, 3, 7],      family: 'minor' },
-  '7sus4': { symbol: '7sus4', tones: [0, 5, 7, 10], shape: [5, 10, 2, 7], family: 'dominant' },
-  aug:   { symbol: 'aug',   tones: [0, 4, 8],      shape: [0, 4, 8],      family: 'other' },
-  '6':   { symbol: '6',     tones: [0, 4, 7, 9],   shape: [0, 4, 9],      family: 'major' },
-  mMaj7: { symbol: 'mMaj7', tones: [0, 3, 7, 11],  shape: [3, 7, 11, 2],  family: 'minor' },
-};
-
-export const chord = (root: SpelledNote, quality: Quality, extra: Partial<Chord> = {}): Chord =>
-  ({ root, quality, ...extra });
-
-export function chordName(c: Chord): string {
-  let name = noteName(c.root) + QUALITIES[c.quality].symbol;
-  if (c.flat9 && c.quality === '7') name += '♭9';
-  if (c.bass && pcOf(c.bass) !== pcOf(c.root)) name += '/' + noteName(c.bass);
-  return name;
+export const QUALITY_INTERVALS: Record<Quality, number[]> = {
+  maj7: [0, 4, 7, 11],
+  m7: [0, 3, 7, 10],
+  '7': [0, 4, 7, 10],
+  'ø7': [0, 3, 6, 10],
+  dim7: [0, 3, 6, 9],
+  maj: [0, 4, 7],
+  min: [0, 3, 7],
 }
 
-export const family = (c: Chord) => QUALITIES[c.quality].family;
-export const isMajorish = (c: Chord) => family(c) === 'major' || family(c) === 'dominant';
-export const isMinorish = (c: Chord) => family(c) === 'minor';
-
-export const rootPc = (c: Chord) => pcOf(c.root);
-export const bassPc = (c: Chord) => pcOf(c.bass ?? c.root);
-
-// Full pitch-class set of the chord, including the ♭9 when marked.
-export function chordPcs(c: Chord): number[] {
-  const r = rootPc(c);
-  const pcs = QUALITIES[c.quality].tones.map(t => mod(r + t, 12));
-  if (c.flat9) pcs.push(mod(r + 1, 12));
-  if (c.bass) pcs.push(bassPc(c));
-  return [...new Set(pcs)];
+export const QUALITY_SUFFIX: Record<Quality, string> = {
+  maj7: 'maj7',
+  m7: 'm7',
+  '7': '7',
+  'ø7': 'ø7',
+  dim7: 'dim7',
+  maj: '',
+  min: 'm',
 }
 
-// What the upper layer plays, as pitch classes.
-export function shapePcs(c: Chord): number[] {
-  const r = rootPc(c);
-  let shape = QUALITIES[c.quality].shape;
-  if (c.flat9 && c.quality === '7') shape = [4, 7, 10, 1]; // 3, 5, 7, ♭9: the diminished-with-root sound
-  return shape.map(t => mod(r + t, 12));
+export interface Chord {
+  root: number // pitch class
+  quality: Quality
+  /** How the root is spelled. Optional; plain flat names are used without it. */
+  spelling?: Spelling
 }
 
-export const sameChord = (a: Chord, b: Chord) =>
-  rootPc(a) === rootPc(b) && a.quality === b.quality && bassPc(a) === bassPc(b) && !!a.flat9 === !!b.flat9;
+/** Pitch classes of a chord, root first. */
+export const chordTones = (c: Chord): number[] =>
+  QUALITY_INTERVALS[c.quality].map((i) => (c.root + i) % 12)
 
-export const chordKey = (c: Chord) => `${rootPc(c)}:${c.quality}:${bassPc(c)}:${c.flat9 ? 'b9' : ''}`;
+/** The 9th (two semitones above the root), used in place of the root in upper shapes. */
+export const ninth = (c: Chord): number => (c.root + 2) % 12
 
-export function transposeChord(c: Chord, iv: Interval, preferFlats: boolean): Chord {
-  return {
-    ...c,
-    root: transpose(c.root, iv, preferFlats),
-    bass: c.bass ? transpose(c.bass, iv, preferFlats) : undefined,
-  };
-}
+/** Identity for de-duplication: same root and quality, spelling ignored. */
+export const chordKey = (c: Chord): string => `${c.root}:${c.quality}`
 
-export { I };
+export const chordName = (c: Chord): string =>
+  spellingName(c.spelling ?? spellPc(c.root)) + QUALITY_SUFFIX[c.quality]
 
-// Parse a chord symbol such as E♭maj7, Gm7, D7♭9, Bø7, G♯dim7, Dm7/F, F (a triad).
-export function parseChord(s: string): Chord {
-  const m = /^([A-Ga-g])([#♯b♭]*)(.*)$/.exec(s.trim());
-  if (!m) throw new Error(`bad chord ${s}`);
-  const root = parseNote(m[1].toUpperCase() + m[2]);
-  let rest = m[3];
-  let bass: SpelledNote | undefined;
-  const slash = rest.indexOf('/');
-  if (slash >= 0) { bass = parseNote(rest.slice(slash + 1)); rest = rest.slice(0, slash); }
-  const flat9 = /[b♭]9/.test(rest);
-  rest = rest.replace(/[b♭]9/, '');
-  const table: [RegExp, Quality][] = [
-    [/^(maj7|maj9|M7|Δ7?)$/, 'maj7'], [/^(m7|m9|-7|min7)$/, 'm7'], [/^(7|9|13)$/, '7'], [/^(ø7?|m7b5|m7♭5)$/, 'ø7'],
-    [/^(dim7|°7|o7)$/, 'dim7'], [/^$/, 'maj'], [/^(m|min|-)$/, 'min'], [/^(7sus4|sus4|sus)$/, '7sus4'], [/^(aug|\+)$/, 'aug'],
-    [/^6$/, '6'], [/^(mMaj7|mM7)$/, 'mMaj7'],
-  ];
-  const q = table.find(([re]) => re.test(rest));
-  if (!q) throw new Error(`unknown quality in ${s}`);
-  return { root, quality: q[1], bass, flat9: flat9 || undefined };
-}
+/** Whether a chord reads as a minor landing for the purposes of a move. */
+export const isMinorQuality = (q: Quality): boolean =>
+  q === 'm7' || q === 'min' || q === 'ø7' || q === 'dim7'
