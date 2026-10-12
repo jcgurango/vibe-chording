@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vibe Chording</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>Vibe Chording</h1>
+  <label class="key">Key <select id="key-select"></select></label>
+  <details class="rules" id="rules">
+    <summary>Rules</summary>
+    <div class="rules-body">
+      <p class="rules-title">A chord may follow another if it satisfies any of:</p>
+      <label><input type="checkbox" data-rule="common" checked> Common tones, at least
+        <select data-rule="commonMin"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select>
+      </label>
+      <label><input type="checkbox" data-rule="chromatic" checked> Chromatic step-wise motion <small>every voice holds or moves a half step</small></label>
+      <label><input type="checkbox" data-rule="root" checked> Strong root motion, by</label>
+      <div class="sub">
+        <label><input type="checkbox" data-rule="rootStep" checked> step</label>
+        <label><input type="checkbox" data-rule="rootThird" checked> third</label>
+        <label><input type="checkbox" data-rule="rootFifth" checked> fifth</label>
+      </div>
+      <p class="trim-note" id="trim-note"></p>
+    </div>
+  </details>
+  <div class="legend" id="legend"></div>
+</header>
+
+<main>
+  <section class="map-wrap" id="map-wrap">
+    <svg id="map" role="img" aria-label="Chord map"></svg>
+    <div id="tooltip" class="tooltip" hidden></div>
+    <div id="toast" class="toast" hidden></div>
+    <div class="bottom-bar">
+      <div class="map-hint">Click a chord to hear it pure and add it. Lines are named moves; bright arrows are what can follow the last chord.<br>Click a piano key to keep only chords with that note; shift-click to drop chords that have it.</div>
+      <div id="piano" class="piano" aria-label="Note filter"></div>
+      <button id="piano-clear" class="piano-clear" hidden>clear notes</button>
+    </div>
+  </section>
+
+  <aside class="side">
+    <div class="side-head">
+      <h2>Progression</h2>
+      <div class="btns">
+        <button id="play-all" title="Play the progression voice-led">▶ Play</button>
+        <button id="undo" title="Remove the last chord">Undo</button>
+        <button id="clear" title="Clear the progression">Clear</button>
+      </div>
+    </div>
+    <ol id="prog" class="prog"></ol>
+    <p class="hint" id="empty-hint">Nothing yet. Pick a chord on the map to start. Clicking a chord here plays it in its voice-led form: root and 5th in the left hand, three voices above with the 3rd and 7th always present. Use / to pin the bass to another note.</p>
+  </aside>
+</main>
+
+<script src="js/theory.js"></script>
+<script src="js/voicing.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
