@@ -2,20 +2,21 @@
 (() => {
   const NS = 'http://www.w3.org/2000/svg';
   const NODE_R = 26;
-  const STEP_SECONDS = 0.95;
+  const LOOKAHEAD = 0.25;   // seconds of audio scheduled ahead by the player
 
   const state = {
     keyIdx: 0,
     rules: { ...Theory.DEFAULT_RULES },
     palette: [], byId: new Map(), trans: new Map(), trimmed: [], pos: new Map(),
-    progression: [],   // [{ id, slash, top }] pitch classes pinned in the bass / on top, or null
+    tempo: 100,
+    progression: [],   // [{ id, slash, top, len, goto, times }] see Song for len / goto / times
     cursor: 0,         // insertion point: the progression index a new chord goes in front of
     ghost: null,       // { id, slash, top } auditioned at the cursor, not yet added
     filterPrev: false, // keep only chords that can follow the chord before the cursor
     filterNext: false, // keep only chords that can lead into the chord after the cursor
     voicings: [],      // parallel to sequence(): the progression with the ghost spliced in
     hover: null,
-    playTimer: null,
+    playTimers: [],      // pending timeouts of the player; empty when stopped
     filter: new Map(),   // piano filter: pitch class -> 'in' (must have) | 'out' (must not have)
     pickerIndex: null,   // progression index (or 'ghost') whose picker is open
     pickerKind: null,    // 'slash' | 'top'
@@ -32,6 +33,7 @@
     return e;
   };
   const key = () => Theory.KEYS[state.keyIdx];
+  const newEntry = (id) => ({ id, slash: null, top: null, len: Song.BAR, goto: null, times: null });
   const transOf = (a, b) => state.trans.get(a + '>' + b);
   const entryBass = (e) => e.slash ?? state.byId.get(e.id).rootPc;
 
@@ -314,7 +316,7 @@
     flash(id);
     const same = state.ghost?.id === id;
     if (!same) {
-      state.ghost = { id, slash: null, top: null };
+      state.ghost = newEntry(id);
       state.pickerIndex = null;
       refresh();
       scrollToSlot();
@@ -332,6 +334,7 @@
       toast(`${entryName(g)} ${verb} ${entryName(bad.other)} under the current rules · untick that filter to force it`);
       return;
     }
+    for (const e of state.progression) if (e.goto != null && e.goto >= state.cursor) e.goto += 1;
     state.progression.splice(state.cursor, 0, g);
     state.ghost = null;
     setCursor(state.cursor + 1);
@@ -472,6 +475,7 @@
         <button class="top${topped ? ' on' : ''}" title="Pin the top note">▲</button>${actions}</div>
       <div class="row2"><span class="bass">${noteName(v.bass, c)} ${noteName(v.bass2, c)}</span><span class="upper">${upper}</span>${tag}${v.home ? `<span class="home">→ ${v.home}</span>` : ''}</div>
       <div class="row3${warn ? ' warn' : ''}">${parts.join(' · ')}</div>`;
+    li.appendChild(timingRow(e, i, isGhost));
     if (state.pickerIndex === i) li.appendChild(state.pickerKind === 'top' ? topPicker(e, c, i) : slashPicker(e, c, i));
     li.querySelector('.rm').addEventListener('click', (ev) => { ev.stopPropagation(); isGhost ? discardGhost() : removeAt(i); });
     li.querySelector('.add')?.addEventListener('click', (ev) => { ev.stopPropagation(); commitGhost(); });
@@ -486,6 +490,57 @@
     }
     li.addEventListener('click', () => { stopPlayAll(); Audio.playVoicing(v); pulse(li); });
     return li;
+  }
+
+  // Length (bars + fraction) and what happens after the chord.
+  function timingRow(e, i, isGhost) {
+    const row = document.createElement('div');
+    row.className = 'row4';
+    row.addEventListener('click', (ev) => ev.stopPropagation());
+    const sel = (cls, options, value, onChange) => {
+      const s = document.createElement('select');
+      s.className = cls;
+      for (const [v, label] of options) {
+        const o = document.createElement('option');
+        o.value = v; o.textContent = label;
+        s.appendChild(o);
+      }
+      s.value = value;
+      s.addEventListener('change', () => onChange(s.value));
+      row.appendChild(s);
+      return s;
+    };
+    const label = (text) => { const sp = document.createElement('span'); sp.textContent = text; row.appendChild(sp); };
+    const bars = Math.floor(e.len / Song.BAR), frac = e.len % Song.BAR;
+    const setLen = (b, f) => {
+      if (b >= Song.MAX_BARS) f = 0;
+      if (b === 0 && f === 0) f = 3;
+      e.len = b * Song.BAR + f;
+      stopPlayAll();
+      renderList();
+    };
+    label('length');
+    sel('bars', [0, 1, 2, 3, 4].map((b) => [b, `${b} bar${b === 1 ? '' : 's'}`]), bars, (v) => setLen(Number(v), frac));
+    label('+');
+    const fracSel = sel('frac', Song.FRACTIONS.map((f) => [f.tw, f.label]), frac, (v) => setLen(bars, Number(v)));
+    fracSel.disabled = bars >= Song.MAX_BARS;
+    if (isGhost) return row;
+    label('then');
+    const targets = [['', 'next']];
+    for (let k = 0; k < i; k++) targets.push([k, `back to #${k + 1}`]);
+    sel('act', targets, e.goto ?? '', (v) => {
+      e.goto = v === '' ? null : Number(v);
+      if (e.goto == null) e.times = null;
+      stopPlayAll();
+      renderList();
+    });
+    if (e.goto != null) {
+      sel('times', Song.TIMES.map((t) => [t ?? '', t == null ? '∞' : `×${t}`]), e.times ?? '', (v) => {
+        e.times = v === '' ? null : Number(v);
+        stopPlayAll();
+      });
+    }
+    return row;
   }
 
   // Bass-note picker: chord tones first, then every other pitch class.
@@ -558,6 +613,10 @@
 
   function removeAt(i) {
     state.progression.splice(i, 1);
+    for (const e of state.progression) {
+      if (e.goto === i) { e.goto = null; e.times = null; }
+      else if (e.goto != null && e.goto > i) e.goto -= 1;
+    }
     if (state.cursor > i) state.cursor -= 1;
     state.pickerIndex = null;
     defaultFilters();
@@ -573,30 +632,135 @@
     setCursor(0);
   }
 
-  // Plays the sequence, ghost included, so an audition is heard in context.
-  function playAll() {
+  // ---------- player ----------
+  // Plays the sequence (ghost included) at the tempo, following each chord's
+  // length and action, until stopped. Audio is scheduled a little ahead on the
+  // audio clock so the timing doesn't drift with the timers.
+  const playing = () => state.playTimers.length > 0;
+
+  function togglePlay() {
+    if (playing()) stopPlayAll(); else startPlay();
+  }
+
+  function startPlay() {
     stopPlayAll();
-    if (!state.voicings.length) return;
-    Audio.ensure();
+    const seq = sequence();
+    const n = seq.length;
+    if (!n) return;
+    const steps = seq.map(({ e, ghost }) => ({
+      len: e.len, times: e.times,
+      goto: ghost || e.goto == null ? null : seqIndex(e.goto),
+    }));
     const items = [...$('prog').querySelectorAll('li.card')];
-    state.voicings.forEach((v, i) => {
-      Audio.playVoicing(v, { when: i * STEP_SECONDS, dur: STEP_SECONDS + 0.5 });
-    });
+    const counts = new Array(n).fill(0);
+    const secPerTwelfth = (60 / state.tempo) * 4 / Song.BAR;
     let i = 0;
+    let next = Audio.now() + 0.05;
     const tick = () => {
-      items.forEach((li, j) => li.classList.toggle('playing', j === i));
-      items[i]?.scrollIntoView({ block: 'nearest' });
-      i += 1;
-      if (i < items.length) state.playTimer = setTimeout(tick, STEP_SECONDS * 1000);
-      else state.playTimer = setTimeout(() => items.forEach((li) => li.classList.remove('playing')), STEP_SECONDS * 1000);
+      const now = Audio.now();
+      while (next < now + LOOKAHEAD) {
+        const at = i, dur = steps[i].len * secPerTwelfth;
+        Audio.playVoicing(state.voicings[i], { when: next - now, dur });
+        state.playTimers.push(setTimeout(() => {
+          items.forEach((li, j) => li.classList.toggle('playing', j === at));
+          items[at]?.scrollIntoView({ block: 'nearest' });
+        }, Math.max(0, (next - now) * 1000)));
+        next += dur;
+        i = Song.advance(steps, i, counts, { unlimitedOnce: false });
+        if (i >= n) { i = 0; counts.fill(0); }
+      }
+      state.playTimers.push(setTimeout(tick, 100));
     };
+    $('play-all').textContent = '■ Stop';
     tick();
   }
 
   function stopPlayAll() {
-    clearTimeout(state.playTimer);
-    state.playTimer = null;
+    if (!playing()) return;
+    for (const t of state.playTimers) clearTimeout(t);
+    state.playTimers = [];
+    Audio.stopAll();
     for (const li of $('prog').children) li.classList.remove('playing');
+    $('play-all').textContent = '▶ Play';
+  }
+
+  // ---------- export / import ----------
+  function songData() {
+    return {
+      key: key().name, tempo: state.tempo,
+      chords: state.progression.map((e) => ({
+        name: entryName(e), len: e.len, goto: e.goto, times: e.times,
+        top: e.top == null ? null : spellPc(e.top, state.byId.get(e.id)).name,
+      })),
+    };
+  }
+
+  // Replace the progression with one read from text. Throws with a readable message.
+  function importSong(text) {
+    const song = Song.parse(text);
+    let keyIdx = state.keyIdx;
+    if (song.key) {
+      keyIdx = Theory.KEYS.findIndex((k) => Song.norm(k.name) === Song.norm(song.key));
+      if (keyIdx < 0) throw new Error(`Unknown key "${song.key}"`);
+    }
+    const k = Theory.KEYS[keyIdx];
+    const palette = Theory.trim(Theory.buildPalette(k), state.rules).kept;
+    const entries = song.chords.map((c) => {
+      const [chordName, bassName] = c.name.split('/');
+      const chord = palette.find((p) => [p.name, p.roman, p.id].some((x) => Song.norm(x) === Song.norm(chordName)));
+      if (!chord) throw new Error(`Line ${c.line}: no chord "${chordName}" in ${k.name}`);
+      const e = { ...newEntry(chord.id), len: c.len, goto: c.goto, times: c.times };
+      if (bassName != null) {
+        e.slash = Song.notePc(bassName);
+        if (e.slash == null) throw new Error(`Line ${c.line}: can't read bass note "${bassName}"`);
+        if (e.slash === chord.rootPc) e.slash = null;
+      }
+      if (c.top) {
+        const pc = Song.notePc(c.top);
+        if (pc == null || !Voicing.topChoices(chord).some((t) => t.pc === pc)) throw new Error(`Line ${c.line}: ${chord.name} can't have ${c.top} on top`);
+        e.top = pc;
+      }
+      return e;
+    });
+    // everything resolved: now apply
+    stopPlayAll();
+    state.keyIdx = keyIdx;
+    $('key-select').value = keyIdx;
+    if (song.tempo) setTempo(song.tempo);
+    state.progression = entries;
+    state.ghost = null;
+    state.pickerIndex = null;
+    state.cursor = entries.length;
+    defaultFilters();
+    rebuild();
+  }
+
+  function setTempo(bpm) {
+    state.tempo = Math.max(20, Math.min(300, Math.round(bpm) || 100));
+    $('tempo').value = state.tempo;
+  }
+
+  function openIO() {
+    $('io-text').value = Song.format(songData());
+    $('io-msg').textContent = '';
+    $('io').showModal();
+  }
+
+  function exportMidi() {
+    if (!state.progression.length) { toast('Nothing to export yet'); return; }
+    const items = state.progression.map((e) => ({ chord: state.byId.get(e.id), bassPc: e.slash, topPc: e.top }));
+    const voicings = Voicing.voiceLead(items, key().pc);
+    const order = Song.expand(state.progression.map((e) => ({ len: e.len, goto: e.goto, times: e.times })));
+    const events = order.map((i) => {
+      const v = voicings[i];
+      return { notes: [v.bass, v.bass2, ...v.upper], len: state.progression[i].len };
+    });
+    const blob = new Blob([Song.midi(events, state.tempo)], { type: 'audio/midi' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `vibe-chording-${key().name.replace('♭', 'b')}.mid`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
   // ---------- controls ----------
@@ -621,12 +785,26 @@
     $('f-prev').addEventListener('change', (ev) => { state.filterPrev = ev.target.checked; updateActive(); renderList(); });
     $('f-next').addEventListener('change', (ev) => { state.filterNext = ev.target.checked; updateActive(); renderList(); });
 
-    $('play-all').addEventListener('click', playAll);
+    $('play-all').addEventListener('click', togglePlay);
+    $('tempo').value = state.tempo;
+    $('tempo').addEventListener('change', () => { setTempo(Number($('tempo').value)); stopPlayAll(); });
+    $('io-open').addEventListener('click', openIO);
+    $('io-close').addEventListener('click', () => $('io').close());
+    $('io-copy').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText($('io-text').value); $('io-msg').textContent = 'Copied'; }
+      catch (_) { $('io-text').select(); $('io-msg').textContent = 'Select and copy'; }
+    });
+    $('io-import').addEventListener('click', () => {
+      try { importSong($('io-text').value); $('io').close(); }
+      catch (err) { $('io-msg').textContent = err.message; }
+    });
+    $('midi').addEventListener('click', exportMidi);
     $('piano-clear').addEventListener('click', clearNotes);
     $('undo').addEventListener('click', () => { if (state.progression.length) removeAt(state.progression.length - 1); });
     $('clear').addEventListener('click', clearAll);
 
     document.addEventListener('keydown', (ev) => {
+      if ($('io').open) return;
       const tag = ev.target.tagName;
       if (tag === 'SELECT' || tag === 'TEXTAREA' || (tag === 'INPUT' && ev.target.type !== 'checkbox')) return;
       if (ev.key === 'Enter' && state.ghost) { ev.preventDefault(); commitGhost(); }

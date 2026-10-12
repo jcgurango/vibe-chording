@@ -33,11 +33,15 @@ const Audio = (() => {
     voices = keep;
   }
 
+  // Current audio-clock time, for scheduling.
+  const now = () => ensure().currentTime;
+
   function stopAll() {
     if (ctx) cut(ctx.currentTime, true);
   }
 
-  // notes: [{ midi, gain }]; when: seconds from now; dur: seconds
+  // notes: [{ midi, gain }]; when: seconds from now; dur: seconds the chord is held.
+  // The release only starts at the end of dur, so back-to-back chords play legato.
   function play(notes, { when = 0, dur = 1.6 } = {}) {
     const c = ensure();
     const t0 = c.currentTime + when;
@@ -50,7 +54,7 @@ const Audio = (() => {
       g.gain.setValueAtTime(0, t0);
       g.gain.linearRampToValueAtTime(gain, t0 + 0.02);
       g.gain.setTargetAtTime(gain * 0.55, t0 + 0.06, 0.35);
-      g.gain.setTargetAtTime(0, t0 + dur - 0.3, 0.09);
+      g.gain.setTargetAtTime(0, t0 + dur, 0.09);   // held for the full length; the next chord's cut takes over
       osc.connect(g).connect(master);
       osc.start(t0);
       osc.stop(t0 + dur + 0.4);
@@ -73,5 +77,5 @@ const Audio = (() => {
     play([{ midi, gain: 0.2 }], { dur: 1.1, ...opts });
   }
 
-  return { playVoicing, playNote, stopAll, ensure };
+  return { playVoicing, playNote, stopAll, ensure, now };
 })();

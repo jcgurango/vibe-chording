@@ -55,7 +55,20 @@ from a diatonic chord, or no exit into one, are trimmed.
 - Click a chord in the progression list to hear it voice-led. The list shows
   the left hand (root + 5th), the three upper voices, which extension emerged, and why the
   transition is allowed.
-- Play runs the whole sequence voice-led, ghost included.
+- Play runs the sequence voice-led, ghost included, at the tempo (♩ = BPM)
+  and loops until stopped. Each chord has a length: whole bars plus a
+  fraction (1/6, 1/4, 1/3, 1/2, 2/3, 3/4, 5/6), up to four bars. Each chord
+  also has a "then" action: move on to the next chord (the last chord wraps to
+  the first), or go back to an earlier chord, either forever or so that the
+  stretch is heard 2, 3, 4 or 8 times. Repeats nest: an inner repeat starts
+  over every time an outer one jumps back.
+- Text opens the progression as pastable text: key, tempo, then one chord per
+  line with its length, pinned top note and action, e.g.
+  `4  G7/B  1+1/4 bars  top F  then back to 2 x2`. Edit or paste and press
+  Import to replace the progression. Chords are matched by name or roman numeral.
+- MIDI downloads a single-track, single-channel file at the tempo, with the
+  play order expanded: repeats are written out, an unlimited repeat is taken
+  once, and the end does not wrap.
 - The piano under the map is a note filter. Click a key to require that note
   (chords without it are greyed out); shift-click to exclude it (chords with
   it are greyed out). Each note sounds when selected; clicking again clears it.
@@ -73,4 +86,5 @@ from a diatonic chord, or no exit into one, are trimmed.
 - `js/voicing.js` Principle 2 voice leading
 - `js/layout.js` map positions
 - `js/audio.js` Web Audio playback
+- `js/song.js` chord lengths, play order, text format, MIDI writer
 - `js/app.js` UI
