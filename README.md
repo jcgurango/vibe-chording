@@ -16,8 +16,10 @@ npm run build      # typecheck + production build into dist/
 
 - **Columns are steps, rows are the skeletal chords.** Every column holds the whole palette of
   the home key: seven diatonic chords, six borrowed from the parallel minor, five from other
-  parallel modes (a minor home has its short list of seven). The first column lights the usual
-  starting places: I, IV, vi and ii.
+  parallel modes (a minor home has its short list of seven). The first column keeps the
+  catalogue's order and lights the usual starting places: I, IV, vi and ii. Every later column
+  is sorted by score, best next chord on top, so the groups are no longer in blocks; the stripe
+  color on each card still says which group it belongs to.
 - **Choosing a chord duplicates the palette to its right.** The chosen chord stays highlighted in
   its column and the next column becomes the frontier: wires fan out from the chosen chord to
   every chord it could lead to.
@@ -27,9 +29,11 @@ npm run build      # typecheck + production build into dist/
   chord being left (quality flip, bass walk, line cliché, side-slip, sus delay). Pink wires are
   deceptive landings: a dominant-type move aimed at the near-twin of the chord it lands on.
 - **Opacity is the score.** Every wire is scored on the catalogue's dimensions (right fit, left
-  fit, smoothness, tension fit, distance from home, pattern, variety, with Room held at full
-  marks until there is rhythm) and the score sets its opacity. Hover a wire for the breakdown.
-  Each row shows its best few moves; "+N more" shows the rest.
+  fit, smoothness, tension fit, distance from home, pattern, variety; Room only knows that a
+  longer move needs more space until there is rhythm). Direct wires are scaled against direct
+  wires and moves against moves, the catalogue's "compare within kind", and a chord's place in
+  the column comes from its direct motion. Hover a wire for the breakdown. Each row shows its
+  best few moves; "+N more" shows the rest.
 - **Click hears, shift+click chooses.** Clicking a chord, wire or chip plays it voice-led from the
   last chosen chord: a bass on the root (or the slash note) and a close-position upper shape
   that takes the nearest playable shape, per the voice-leading chapter. Shift+click appends the
@@ -56,6 +60,24 @@ npm run build      # typecheck + production build into dist/
 
 All strengths, weights and costs are the catalogue's starting guesses and live in plain tables
 meant to be tuned by ear.
+
+## The bench
+
+The catalogue's examples are encoded in `src/bench/repertoire.ts` as skeletons with the move
+the document reads into each chord. `src/bench/bench.ts` walks each example the way the map
+would: at every gap it ranks the chord the song chose among all next chords, and the move the
+song used among all moves into that chord.
+
+```
+npm run bench            # the table, one line per gap, at the default home dial (-0.5)
+npm run bench -- 0.5     # at another dial setting
+npx tsx scripts/tune.ts  # sweep the knobs in scoring.ts TUNING and print the best settings
+```
+
+`src/bench/__tests__/repertoire.test.ts` asserts tendencies, not determinism: most chosen
+chords in the top five of eighteen, most moves in the top three. The knobs that were tuned
+against it are `TUNING` in `src/theory/scoring.ts`, `STRENGTH` in `src/theory/moves.ts` and the
+pairing tables in `src/theory/palette.ts`.
 
 ## Not yet
 

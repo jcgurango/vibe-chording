@@ -224,7 +224,7 @@ export function pathsInto(J: Chord | null, L: Chord, home: Home, pal: Skeletal[]
   // Drop moves that just restate the jumpoff, and duplicates that another recipe already produced.
   const seen = new Map<string, Path>();
   for (const p of all) {
-    if (J && p.chords.length === 1 && chordKey(p.chords[0]) === chordKey(J)) continue;
+    if (J && p.chords.length >= 1 && chordKey(p.chords[0]) === chordKey(J)) continue; // starts by restating the jumpoff
     const key = p.chords.map(chordKey).join('|');
     const prior = seen.get(key);
     if (!prior) { seen.set(key, { ...p, id: `${chordKey(L)}<${key}` }); continue; }

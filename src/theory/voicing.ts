@@ -83,8 +83,17 @@ export function voice(c: Chord, prev: Voicing | null): Voicing {
 }
 
 // The movement cost between two voicings, which is the smoothness dimension in scoring.
+// A voice that holds or moves by step is the smooth case, so steps count at half weight;
+// anything wider counts in full.
 export function voicingDistance(a: Voicing, b: Voicing): number {
-  return movement(a.upper, b.upper) + 0.5 * Math.abs(a.bass - b.bass);
+  return stepMovement(a.upper, b.upper) + 0.5 * Math.abs(a.bass - b.bass);
+}
+
+function stepMovement(a: number[], b: number[]): number {
+  const cost = (d: number) => (d <= 2 ? d * 0.5 : d);
+  if (a.length === b.length) return a.reduce((s, x, i) => s + cost(Math.abs(x - b[i])), 0);
+  const [big, small] = a.length > b.length ? [a, b] : [b, a];
+  return big.reduce((s, x) => s + cost(Math.min(...small.map(y => Math.abs(x - y)))), 0);
 }
 
 // Voice a sequence from a starting voicing. Returns each chord's voicing and the cost of each link.

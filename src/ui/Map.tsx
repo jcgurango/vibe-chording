@@ -9,24 +9,24 @@ type Props = {
   onCard: (col: number, row: number, select: boolean) => void;
   onWire: (w: Wire, select: boolean) => void;
   onHoverWire: (w: Wire | null, e?: React.MouseEvent) => void;
-  onMore: (row: number) => void;
+  onMore: (rowId: string) => void;
 };
 
 const GROUP_NAMES: Record<string, string> = { diatonic: 'diatonic', minor: 'parallel minor', modes: 'other modes', outside: 'outside the palette' };
 
 export function Map({ layout, zoom, hoverId, onCard, onWire, onHoverWire, onMore }: Props) {
-  const { columns, rows, wires, width, height, more } = layout;
+  const { columns, wires, width, height, more } = layout;
   const started = columns[0].kind !== 'start';
 
   return (
     <svg width={width * zoom} height={height * zoom} viewBox={`0 0 ${width} ${height}`}>
-      {/* group labels and separators */}
-      {rows.map((r, i) => r.groupStart ? (
-        <g key={`g${i}`}>
-          <text className="group-label" x={12} y={r.top + 12}>{GROUP_NAMES[r.group]}</text>
-          {i > 0 && <line x1={12} x2={width - 20} y1={r.top - 7} y2={r.top - 7} stroke="var(--line)" strokeDasharray="2 4" />}
+      {/* group labels, only where a column keeps the catalogue's order */}
+      {columns.filter(c => !c.ordered).map((c, ci) => c.rows.map((r, i) => (i === 0 || c.rows[i - 1].group !== r.group) ? (
+        <g key={`g${ci}-${i}`}>
+          <text className="group-label" x={ci === 0 ? 12 : c.x} y={ci === 0 ? r.top + 12 : r.top - 4}>{GROUP_NAMES[r.group]}</text>
+          {i > 0 && ci === 0 && <line x1={12} x2={c.x + CARD_W} y1={r.top - 7} y2={r.top - 7} stroke="var(--line)" strokeDasharray="2 4" />}
         </g>
-      ) : null)}
+      ) : null))}
 
       {/* wires under the cards; hovered one drawn last */}
       {[...wires].sort((a, b) => (a.id === hoverId ? 1 : 0) - (b.id === hoverId ? 1 : 0)).map(w => (
@@ -35,18 +35,17 @@ export function Map({ layout, zoom, hoverId, onCard, onWire, onHoverWire, onMore
       ))}
 
       {/* arrowheads: one per target row per gap */}
-      {layout.gapX.map((g, k) => rows.map((r, i) => {
-        const has = wires.some(w => w.gap === k && w.targetRow === i);
-        if (!has) return null;
-        const chosen = wires.some(w => w.gap === k && w.targetRow === i && w.chosen);
-        const best = Math.max(...wires.filter(w => w.gap === k && w.targetRow === i).map(w => w.opacity));
+      {layout.gapX.map((g, k) => columns[k + 1].rows.map((r, i) => {
+        const into = wires.filter(w => w.gap === k && w.targetRow === i);
+        if (!into.length) return null;
+        const chosen = into.some(w => w.chosen);
+        const best = Math.max(...into.map(w => w.opacity));
         return <path key={`ah${k}-${i}`} d={`M${g.x1 - 7},${r.center - 4} L${g.x1},${r.center} L${g.x1 - 7},${r.center + 4} Z`}
           fill={chosen ? 'var(--accent)' : 'var(--move)'} opacity={chosen ? 1 : best} />;
       }))}
 
       {/* cards */}
-      {columns.map((c, ci) => rows.map((r, ri) => {
-        if (!r.inPalette && !(c.kind === 'past' && c.chosenRow === ri)) return null;
+      {columns.map((c, ci) => c.rows.map((r, ri) => {
         const cls = ['card', `g-${r.group}`];
         if (c.kind === 'start') cls.push(r.starting ? 'start' : 'dim');
         if (c.kind === 'past') cls.push(c.chosenRow === ri ? 'chosen' : 'dim');
@@ -63,13 +62,13 @@ export function Map({ layout, zoom, hoverId, onCard, onWire, onHoverWire, onMore
 
       {/* "more" toggles */}
       {more.map(m => (
-        <g key={`m${m.row}`} className="more" onClick={() => onMore(m.row)}>
+        <g key={`m${m.rowId}`} className="more" onClick={() => onMore(m.rowId)}>
           <text x={m.x} y={m.y} textAnchor="end">{m.expanded ? 'fewer' : `+${m.hidden} more`}</text>
         </g>
       ))}
 
       {!started && (
-        <text className="hint" x={columns[0].x + CARD_W + 24} y={rows[0].center + 4}>
+        <text className="hint" x={columns[0].x + CARD_W + 24} y={columns[0].rows[0].center + 4}>
           ← lit chords are the usual starting places. click to hear, shift+click to choose.
         </text>
       )}

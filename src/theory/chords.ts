@@ -1,6 +1,6 @@
 // chords.ts — chord qualities, naming, and the notes a chord contributes to a voicing.
 
-import { I, type Interval, type SpelledNote, noteName, pcOf, mod, transpose } from './pitch';
+import { I, type Interval, type SpelledNote, noteName, pcOf, mod, transpose, parseNote } from './pitch';
 
 export type Quality =
   | 'maj7' | 'm7' | '7' | 'ø7' | 'dim7'
@@ -84,3 +84,24 @@ export function transposeChord(c: Chord, iv: Interval, preferFlats: boolean): Ch
 }
 
 export { I };
+
+// Parse a chord symbol such as E♭maj7, Gm7, D7♭9, Bø7, G♯dim7, Dm7/F, F (a triad).
+export function parseChord(s: string): Chord {
+  const m = /^([A-Ga-g])([#♯b♭]*)(.*)$/.exec(s.trim());
+  if (!m) throw new Error(`bad chord ${s}`);
+  const root = parseNote(m[1].toUpperCase() + m[2]);
+  let rest = m[3];
+  let bass: SpelledNote | undefined;
+  const slash = rest.indexOf('/');
+  if (slash >= 0) { bass = parseNote(rest.slice(slash + 1)); rest = rest.slice(0, slash); }
+  const flat9 = /[b♭]9/.test(rest);
+  rest = rest.replace(/[b♭]9/, '');
+  const table: [RegExp, Quality][] = [
+    [/^(maj7|maj9|M7|Δ7?)$/, 'maj7'], [/^(m7|m9|-7|min7)$/, 'm7'], [/^(7|9|13)$/, '7'], [/^(ø7?|m7b5|m7♭5)$/, 'ø7'],
+    [/^(dim7|°7|o7)$/, 'dim7'], [/^$/, 'maj'], [/^(m|min|-)$/, 'min'], [/^(7sus4|sus4|sus)$/, '7sus4'], [/^(aug|\+)$/, 'aug'],
+    [/^6$/, '6'], [/^(mMaj7|mM7)$/, 'mMaj7'],
+  ];
+  const q = table.find(([re]) => re.test(rest));
+  if (!q) throw new Error(`unknown quality in ${s}`);
+  return { root, quality: q[1], bass, flat9: flat9 || undefined };
+}

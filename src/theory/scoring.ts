@@ -48,7 +48,17 @@ export type Scored = {
 };
 
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
-const smoothFromCost = (c: number) => clamp01(1 - c / 14);
+
+// Tuning knobs, so the bench can sweep them. Values are starting guesses tuned against the repertoire.
+export const TUNING = {
+  tensionPenalty: 0.2,    // per tension level, until rhythm says how long the slot is
+  unlistedLeft: 0.8,      // how much an unlisted move's first chord can earn from smoothness alone
+  smoothDivisor: 14,      // movement cost at which smoothness reaches zero
+  room2: 0.75,            // room for a two-chord move, with no rhythm to say otherwise
+  room3: 0.7,             // and for three or more
+  distanceScale: 2.5,     // outside notes per chord at which distance from home saturates
+};
+const smoothFromCost = (c: number) => clamp01(1 - c / TUNING.smoothDivisor);
 
 function lastSkeletal(history: Placed[], n: number): Placed[] {
   return history.filter(p => p.weight === 'skeletal').slice(-n);
@@ -75,9 +85,9 @@ export function scorePath(path: Path, ctx: ScoreContext): Scored {
   let right: number;
   if (path.strength !== undefined) {
     right = path.strength;
-    explain.right = path.deceptive ? `recipe × ${0.6} for the deceptive landing` : 'recipe strength';
+    explain.right = path.deceptive ? 'recipe, discounted for the deceptive landing' : 'recipe strength';
   } else {
-    right = 0.25 + 0.35 * smoothFromCost(costs[0] ?? 0);
+    right = 0.15 + 0.3 * smoothFromCost(costs[0] ?? 0);
     explain.right = 'unlisted pairing, ranked by smoothness';
   }
 
@@ -86,18 +96,22 @@ export function scorePath(path: Path, ctx: ScoreContext): Scored {
   const listed = pairingStrength(jump.chord, first, home, pal);
   let left: number;
   if (listed !== undefined) { left = listed; explain.left = 'listed common motion'; }
-  else { left = Math.min(0.8, smoothFromCost(costs[0] ?? 0)); explain.left = 'unlisted, so smoothness'; }
+  else if (path.kind === 'bare') { left = 0.5 * smoothFromCost(costs[0] ?? 0); explain.left = 'unlisted, so smoothness'; }
+  else { left = TUNING.unlistedLeft * smoothFromCost(costs[0] ?? 0); explain.left = 'unlisted, so smoothness'; }
 
-  // Tension fit: the landing holds a full slot, so lower tension suits it; passing chords may be tense.
-  const tL = tensionLevel(path.landing, home, pal);
-  const tension = 1 - 0.15 * tL;
-  explain.tension = `landing tension ${tL}`;
+  // Tension fit: without rhythm every chord is assumed to hold a moderate slot, so lower
+  // tension suits each of them a little better. Short slots before a downbeat will change this.
+  const levels = chords.map(c => tensionLevel(c, home, pal));
+  const tension = 1 - TUNING.tensionPenalty * (levels.reduce((a, b) => a + b, 0) / levels.length);
+  explain.tension = `tension ${levels.join(', ')}`;
 
-  const room = 1;
+  // Room: no rhythm yet, so the only thing known is that a longer move needs more space.
+  const room = path.chords.length <= 1 ? 1 : path.chords.length === 2 ? TUNING.room2 : TUNING.room3;
+  if (path.chords.length > 1) explain.room = `${path.chords.length} chords need space`;
 
   // Distance from home, bent by the taste dial.
   const outside = chords.map(c => outsideNotes(c, home));
-  const frac = Math.min(4, outside.reduce((a, b) => a + b, 0) / chords.length) / 4;
+  const frac = Math.min(1, outside.reduce((a, b) => a + b, 0) / chords.length / TUNING.distanceScale);
   const distance = clamp01(0.5 - homeDial * (0.5 - frac));
   explain.distance = `${outside.join(', ')} note${outside.reduce((a, b) => a + b, 0) === 1 ? '' : 's'} outside the scale`;
 
@@ -119,13 +133,17 @@ export function scorePath(path: Path, ctx: ScoreContext): Scored {
   // Variety: immediate repeats only.
   let variety = 1;
   if (sameChord(path.landing, jump.chord)) { variety = path.kind === 'side-slip' || path.kind === 'sus delay' ? 0.7 : 0.4; explain.variety = 'repeats the chord'; }
-  else if (path.kind !== 'bare' && lastGapKind(history) === path.kind) { variety = 0.6; explain.variety = 'same move as the last gap'; }
+  else if (path.kind !== 'bare' && lastGapKind(history) === path.kind) { variety = 0.8; explain.variety = 'same move as the last gap'; }
 
   const dims: Record<Dim, number> = { right, left, smooth, tension, room, distance, pattern, variety };
   const totalW = Object.values(WEIGHTS).reduce((a, b) => a + b, 0);
   const total = (Object.keys(dims) as Dim[]).reduce((s, k) => s + WEIGHTS[k] * dims[k], 0) / totalW;
   return { path, total, dims, voicings, explain };
 }
+
+// How a chord ranks as the next skeletal chord: by its direct motion. Moves into it are
+// decoration on that choice and are compared among themselves (the catalogue's "within kind").
+export const chordScore = (bare: Scored, _moves: Scored[]) => bare.total;
 
 // Map scores to opacity across a set, so the strongest line is solid and the weakest still visible.
 export function opacityScale(totals: number[]): (t: number) => number {

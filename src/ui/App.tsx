@@ -3,7 +3,7 @@ import { type Home, HOME_ROOTS, palette, identify, prefersFlats, type Mode } fro
 import { pathsInto, type Path } from '../theory/moves';
 import { scorePath, opacityScale, type Placed, type Scored } from '../theory/scoring';
 import { voice, voiceSequence, type Voicing } from '../theory/voicing';
-import { chordName, transposeChord } from '../theory/chords';
+import { type Chord, chordName, transposeChord } from '../theory/chords';
 import { intervalBetween, midiName, noteName } from '../theory/pitch';
 import { player, type Sound } from '../audio/player';
 import { layoutMap, type FrontierRow, type Wire } from './layout';
@@ -16,7 +16,7 @@ export function App() {
   const [rootIdx, setRootIdx] = useState(0);
   const [mode, setMode] = useState<Mode>('major');
   const [progression, setProgression] = useState<Placed[]>([]);
-  const [homeDial, setHomeDial] = useState(0);
+  const [homeDial, setHomeDial] = useState(-0.5);
   const [perChord, setPerChord] = useState(2);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [ghosts, setGhosts] = useState(false);
@@ -30,23 +30,33 @@ export function App() {
 
   useEffect(() => player.subscribe(setSound), []);
 
-  // The frontier: every palette chord scored as the next landing from the last placed chord.
-  const frontier: FrontierRow[] | null = useMemo(() => {
-    if (!progression.length) return null;
-    const ctx = { home, pal, history: progression, homeDial };
-    const jump = progression[progression.length - 1].chord;
-    return pal.map(sk => {
-      const scored = pathsInto(jump, sk.chord, home, pal).map(p => scorePath(p, ctx));
-      const bare = scored.find(s => s.path.kind === 'bare')!;
-      const moves = scored.filter(s => s.path.kind !== 'bare').sort((a, b) => b.total - a.total);
-      return { sk, bare, moves };
+  // One frontier per gap: every palette chord scored as the next landing from the chord chosen at that step.
+  // The last one is live; the earlier ones order the past columns the way they were when they were chosen.
+  const frontiers: FrontierRow[][] = useMemo(() => {
+    const idx = progression.map((p, i) => (p.weight === 'skeletal' ? i : -1)).filter(i => i >= 0);
+    return idx.map(end => {
+      const history = progression.slice(0, end + 1);
+      const ctx = { home, pal, history, homeDial };
+      const jump = history[history.length - 1].chord;
+      return pal.map(sk => {
+        const scored = pathsInto(jump, sk.chord, home, pal).map(p => scorePath(p, ctx));
+        const bare = scored.find(s => s.path.kind === 'bare')!;
+        const moves = scored.filter(s => s.path.kind !== 'bare').sort((a, b) => b.total - a.total);
+        return { sk, bare, moves };
+      });
     });
   }, [progression, home, pal, homeDial]);
+  const frontier = frontiers.length ? frontiers[frontiers.length - 1] : null;
 
-  const opacityOf = useMemo(() => opacityScale(frontier ? frontier.flatMap(f => [f.bare.total, ...f.moves.map(m => m.total)]) : []), [frontier]);
+  // Two scales, so direct motions are compared with direct motions and moves with moves.
+  const opacityOf = useMemo(() => {
+    const bare = opacityScale(frontier ? frontier.map(f => f.bare.total) : []);
+    const moves = opacityScale(frontier ? frontier.flatMap(f => f.moves.map(m => m.total)) : []);
+    return (s: Scored) => (s.path.kind === 'bare' ? bare : moves)(s.total);
+  }, [frontier]);
 
-  const layout = useMemo(() => layoutMap({ pal, progression, frontier, perChord, expanded, ghosts, opacityOf }),
-    [pal, progression, frontier, perChord, expanded, ghosts, opacityOf]);
+  const layout = useMemo(() => layoutMap({ pal, progression, frontiers, perChord, expanded, ghosts, opacityOf }),
+    [pal, progression, frontiers, perChord, expanded, ghosts, opacityOf]);
 
   // ----- playing -----
   const playVoicings = useCallback((vs: Voicing[], last: 'skeletal' | 'passing' = 'skeletal') => {
@@ -68,35 +78,34 @@ export function App() {
     setExpanded(new Set());
   };
 
-  const startWith = (row: number) => {
-    const sk = pal[row];
-    const v = voice(sk.chord, null);
-    setProgression([{ chord: sk.chord, weight: 'skeletal', kind: 'bare', voicing: v, skeletal: sk }]);
+  const startWith = (chord: Chord) => {
+    const v = voice(chord, null);
+    setProgression([{ chord, weight: 'skeletal', kind: 'bare', voicing: v, skeletal: identify(chord, pal) }]);
     playVoicings([v]);
   };
 
   const skeletalIdx = progression.map((p, i) => (p.weight === 'skeletal' ? i : -1)).filter(i => i >= 0);
 
-  const onCard = (col: number, row: number, select: boolean) => {
+  const onCard = (col: number, rowIndex: number, select: boolean) => {
     const c = layout.columns[col];
+    const row = c.rows[rowIndex];
     if (c.kind === 'start') {
-      if (select) startWith(row); else playVoicings([voice(pal[row].chord, null)]);
+      if (select) startWith(row.chord); else playVoicings([voice(row.chord, null)]);
       return;
     }
     if (c.kind === 'frontier') {
-      const s = frontier![row].bare;
-      if (select) { placeScored(s); }
+      const s = row.frontier!.bare;
+      if (select) placeScored(s);
       playScored(s);
       return;
     }
     // past column
     if (!select) { playVoicings([progression[c.placedIndex!].voicing]); return; }
-    if (c.step === 0) { startWith(row); return; }
+    if (c.step === 0) { startWith(row.chord); return; }
     // Re-pick at this step: keep everything up to the previous skeletal chord, then place this one as a bare pick.
     const keep = progression.slice(0, skeletalIdx[c.step - 1] + 1);
-    const chord = layout.rows[row].chord;
-    const v = voice(chord, keep[keep.length - 1].voicing);
-    setProgression([...keep, { chord, weight: 'skeletal', kind: 'bare', voicing: v, skeletal: identify(chord, pal) }]);
+    const v = voice(row.chord, keep[keep.length - 1].voicing);
+    setProgression([...keep, { chord: row.chord, weight: 'skeletal', kind: 'bare', voicing: v, skeletal: identify(row.chord, pal) }]);
     setExpanded(new Set());
     playVoicings([v]);
   };
@@ -115,8 +124,7 @@ export function App() {
     setHover({ wire: w, x: e.clientX, y: e.clientY });
   };
 
-  const onMore = (row: number) => {
-    const id = pal[row].id;
+  const onMore = (id: string) => {
     setExpanded(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   };
 

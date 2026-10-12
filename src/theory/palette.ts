@@ -88,22 +88,22 @@ export const MINOR_PALETTE: SkeletalDef[] = [
 type Pairings = Record<string, Record<string, number>>;
 
 export const MAJOR_PAIRINGS: Pairings = {
-  I:    { ii: .6, iii: .5, IV: .7, V: .6, vi: .7, vii: .3, i: .4, iiø: .3, bIII: .4, iv: .4, bVI: .4, bVII7: .4,
+  I:    { ii: .6, iii: .5, IV: .7, V: .6, vi: .7, vii: .3, i: .4, iiø: .3, bIII: .5, iv: .4, bVI: .4, bVII7: .4,
           v: .4, bVIImaj7: .5, bII: .3, '#ivø': .3, IV7: .4 },
-  ii:   { V: .9, iii: .6, I: .4, IV: .4, vi: .3, bII: .4, iiø: .3, '#ivø': .3, bIII: .3 },
-  iii:  { vi: .7, IV: .6, ii: .6, I: .4, V: .3, '#ivø': .2 },
-  IV:   { V: .8, I: .7, iv: .8, ii: .4, iii: .4, vi: .5, IV7: .5, bVII7: .4, '#ivø': .3, bVIImaj7: .3, bIII: .3 },
-  V:    { I: 1, vi: .6, IV: .3, iii: .3 },
-  vi:   { IV: .7, ii: .7, iv: .5, v: .5, iii: .4, I: .5, V: .4, bVI: .4, bIII: .3, bVIImaj7: .3, vii: .3 },
+  ii:   { V: .9, iii: .6, I: .4, IV: .6, vi: .5, bII: .4, iiø: .3, '#ivø': .3, bIII: .3 },
+  iii:  { vi: .7, IV: .65, ii: .6, I: .4, V: .3, '#ivø': .2 },
+  IV:   { V: .8, I: .7, iv: .8, ii: .4, iii: .5, vi: .6, IV7: .5, bVII7: .4, '#ivø': .3, bVIImaj7: .5, bIII: .3 },
+  V:    { I: 1, vi: .6, IV: .3, iii: .4 },
+  vi:   { IV: .7, ii: .7, iv: .6, v: .55, iii: .5, I: .5, V: .4, bVI: .4, bIII: .3, bVIImaj7: .3, vii: .3 },
   vii:  { vi: .6, I: .4, iii: .3, bIII: .2 },
   i:    { iiø: .6, bIII: .6, iv: .6, bVI: .6, bVII7: .6, IV: .4, I: .3, v: .4, ii: .3, bVIImaj7: .4 },
   iiø:  { V: .9, iv: .5, i: .4, bVI: .3, bII: .3 },
   bIII: { IV: .8, bVI: .7, iv: .6, I: .5, bVIImaj7: .3, ii: .3, i: .3 },
   iv:   { I: .9, V: .5, bVI: .4, bVII7: .4, i: .4, ii: .3, bII: .3 },
-  bVI:  { bVII7: .7, bVIImaj7: .7, I: .7, iv: .4, V: .4, bIII: .3, i: .3, IV: .3 },
+  bVI:  { bVII7: .7, bVIImaj7: .7, I: .75, iv: .4, V: .4, bIII: .3, i: .3, IV: .3 },
   bVII7: { I: .9, IV: .3, bVI: .3, vi: .3, bIII: .3 },
   v:    { IV: .7, I: .4, bVIImaj7: .4, bIII: .3, vi: .3, iv: .3, ii: .3, IV7: .5 },
-  bVIImaj7: { IV: .7, I: .6, bVI: .5, bIII: .4, vi: .3, v: .3, ii: .3 },
+  bVIImaj7: { IV: .7, I: .6, bVI: .6, bIII: .4, vi: .3, v: .3, ii: .3 },
   bII:  { I: .8, ii: .6, V: .3, bIII: .2, iii: .2 },
   '#ivø': { IV: .8, iii: .6, vi: .3, V: .3, I: .3 },
   IV7:  { I: .8, vi: .5, V: .4, iv: .4, bVII7: .3, ii: .3 },
@@ -162,8 +162,23 @@ export function identify(c: Chord, pal: Skeletal[]): Skeletal | undefined {
 
 export function pairingStrength(from: Chord, to: Chord, home: Home, pal: Skeletal[]): number | undefined {
   const a = identify(from, pal), b = identify(to, pal);
-  if (!a || !b) return undefined;
-  return pairings(home)[a.id]?.[b.id];
+  const listed = a && b ? pairings(home)[a.id]?.[b.id] : undefined;
+  return listed ?? recipePairing(from, to);
+}
+
+// A chord that is itself a move resolving to its landing (a promoted dominant, a tritone sub,
+// a diminished chord a half step below) has a known strength into it, listed or not.
+export function recipePairing(from: Chord, to: Chord): number | undefined {
+  const up = mod(rootPc(to) - rootPc(from), 12);
+  const toMajor = to.quality === 'maj7' || to.quality === 'maj' || to.quality === '7';
+  if (from.quality === '7') {
+    if (up === 5) return 1;                       // dominant
+    if (up === 11) return 0.8;                    // tritone sub
+    if (up === 2) return toMajor ? 0.7 : 0.4;     // backdoor
+  }
+  if (from.quality === 'dim7' && up === 1) return 0.8;
+  if (from.quality === 'ø7' && up === 5) return 0.5;  // the ii of a ii–V, heading for its V
+  return undefined;
 }
 
 // Tension levels from the scoring chapter.
