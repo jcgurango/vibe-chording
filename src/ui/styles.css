@@ -1,0 +1,132 @@
+:root {
+  --bg: #121417;
+  --panel: #1a1d22;
+  --line: #2a2f37;
+  --text: #e6e8eb;
+  --muted: #8b93a1;
+  --accent: #7cc4ff;
+  --accent-2: #ffd479;
+  --diatonic: #7cc4ff;
+  --minor: #c79cff;
+  --modes: #ffb169;
+  --chip: #262b33;
+  --chip-text: #f2f4f7;
+  --move: #9ad0ff;
+  --variation: #ffd479;
+  --deceptive: #ff9fb1;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; height: 100%; }
+body { background: var(--bg); overflow: hidden; }
+
+.app { display: grid; grid-template-rows: auto auto 1fr; height: 100%; }
+
+header {
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+}
+header h1 { font-size: 15px; font-weight: 600; margin: 0 8px 0 0; letter-spacing: 0.01em; }
+header h1 span { color: var(--muted); font-weight: 400; margin-left: 8px; }
+.control { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.control select, .control input[type=number] {
+  background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font-size: 13px;
+}
+.control input[type=range] { width: 110px; accent-color: var(--accent); }
+.control .dial-ends { display: flex; justify-content: space-between; width: 110px; font-size: 10px; margin-top: -4px; }
+.status { margin-left: auto; color: var(--muted); font-size: 12px; }
+.status b { color: var(--text); font-weight: 500; }
+
+.strip {
+  display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line);
+  min-height: 70px; overflow-x: auto; background: #15181c;
+}
+.strip .hint { color: var(--muted); font-size: 12px; }
+.strip .hint kbd { background: var(--chip); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 11px; }
+.placed {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--chip); cursor: pointer; min-width: 64px;
+  user-select: none;
+}
+.placed:hover { border-color: var(--accent); }
+.placed.passing { padding: 3px 8px; min-width: 44px; opacity: 0.85; border-style: dashed; }
+.placed .numeral { font-size: 11px; color: var(--muted); }
+.placed .name { font-size: 15px; font-weight: 600; }
+.placed.passing .name { font-size: 12px; font-weight: 500; }
+.placed .notes { font-size: 10px; color: var(--muted); letter-spacing: 0.02em; }
+.placed .kind { font-size: 9px; color: var(--variation); text-transform: uppercase; letter-spacing: 0.06em; }
+.strip .sep { color: var(--muted); }
+.strip button, header button {
+  background: var(--chip); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 12px;
+}
+.strip button:hover, header button:hover { border-color: var(--accent); }
+.strip .actions { display: flex; gap: 6px; margin-left: auto; }
+
+.map-wrap { position: relative; overflow: auto; }
+.map-wrap svg { display: block; }
+
+.card { cursor: pointer; }
+.card rect.body { fill: var(--chip); stroke: var(--line); stroke-width: 1; rx: 8; }
+.card:hover rect.body { stroke: var(--accent); }
+.card.chosen rect.body { stroke: var(--accent); stroke-width: 2; fill: #223040; }
+.card.start rect.body { stroke: var(--accent-2); }
+.card text { pointer-events: none; }
+.card .numeral { font-size: 10.5px; fill: var(--muted); }
+.card .name { font-size: 14px; font-weight: 600; fill: var(--text); }
+.card .stripe { rx: 2; }
+.card.g-diatonic .stripe { fill: var(--diatonic); }
+.card.g-minor .stripe { fill: var(--minor); }
+.card.g-modes .stripe { fill: var(--modes); }
+.card.g-outside .stripe { fill: var(--muted); }
+.card.dim { opacity: 0.4; }
+
+.group-label { font-size: 10px; fill: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+
+.lane { cursor: pointer; }
+.lane path.wire { fill: none; stroke: var(--move); stroke-width: 1.5; }
+.lane.variation path.wire { stroke: var(--variation); }
+.lane.deceptive path.wire { stroke: var(--deceptive); }
+.lane.bare path.wire { stroke: var(--accent); stroke-width: 2; }
+.lane path.hit { fill: none; stroke: transparent; stroke-width: 12; }
+.lane.hover path.wire { stroke-width: 3; }
+.lane.chosen path.wire { stroke-width: 2.5; }
+.lane .chip rect { fill: var(--chip); stroke: var(--move); stroke-width: 1; rx: 4; }
+.lane.variation .chip rect { stroke: var(--variation); }
+.lane.deceptive .chip rect { stroke: var(--deceptive); }
+.lane .chip text { font-size: 11px; fill: var(--chip-text); font-weight: 500; }
+.lane .kind-bg { fill: var(--bg); }
+svg .hint { font-size: 12px; fill: var(--muted); }
+.lane .kind { font-size: 9px; fill: var(--move); text-transform: uppercase; letter-spacing: 0.06em; }
+.lane.variation .kind { fill: var(--variation); }
+.lane.deceptive .kind { fill: var(--deceptive); }
+.lane text { pointer-events: none; }
+.lane .arrowhead { fill: var(--move); }
+.lane.bare .arrowhead { fill: var(--accent); }
+.lane.variation .arrowhead { fill: var(--variation); }
+.lane.deceptive .arrowhead { fill: var(--deceptive); }
+
+.more { cursor: pointer; }
+.more text { font-size: 10px; fill: var(--muted); }
+.more:hover text { fill: var(--text); }
+
+.tooltip {
+  position: fixed; z-index: 10; pointer-events: none; background: #0f1114; border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px 12px; width: 300px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); font-size: 12px;
+}
+.tooltip h3 { margin: 0 0 2px; font-size: 13px; }
+.tooltip .note { color: var(--muted); margin-bottom: 8px; }
+.tooltip .chords { font-weight: 600; margin-bottom: 8px; }
+.tooltip .dim { display: grid; grid-template-columns: 110px 1fr 34px; gap: 8px; align-items: center; margin: 2px 0; }
+.tooltip .dim .label { color: var(--muted); }
+.tooltip .dim .bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.tooltip .dim .bar div { height: 100%; background: var(--accent); }
+.tooltip .dim .val { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tooltip .total { margin-top: 8px; display: flex; justify-content: space-between; }
+.tooltip .why { color: var(--muted); font-size: 11px; margin-top: 6px; }
+.tooltip .voiced { color: var(--muted); font-size: 11px; margin-top: 4px; }
+
+.empty { color: var(--muted); font-size: 13px; }

@@ -1,53 +1,12 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Skeleton and Moves</title>
-<link rel="stylesheet" href="css/style.css">
-</head>
-<body>
-<svg id="space" xmlns="http://www.w3.org/2000/svg"></svg>
-
-<div id="viewctl">
-  <button id="zoom-in" title="Zoom in">+</button>
-  <button id="zoom-out" title="Zoom out">−</button>
-  <button id="recenter" title="Center on home">⌂</button>
-</div>
-
-<aside id="panel">
-  <header>
-    <h1>Skeleton <span>and</span> Moves</h1>
-    <div class="controls">
-      <label>Home <select id="key"></select></label>
-      <label class="dial"><span>Stay home</span><input id="dial" type="range" min="-1" max="1" step="0.1"><span>Wander</span></label>
-    </div>
-  </header>
-  <section id="status"></section>
-  <section id="why" class="why"></section>
-  <div id="cands"></div>
-  <details class="help">
-    <summary>What am I looking at?</summary>
-    <ul>
-      <li><b>Columns</b> follow the chain of fourths: brighter to the left, darker to the right, home in the middle. <b>Rows</b> are the palettes from the catalogue.</li>
-      <li>The sequence is open-ended. The blue <b>→ ?</b> in the bar is the usual focus: where could the last chord lead? Every skeletal chord is scored for that step; brightness and the small bar show the score, three dots the tension level.</li>
-      <li><b>Blue arrows</b> leave the last chord for the strongest next chords, with pills on the way: paths <i>by way of</i> a dominant, a ii–V, a slide, and so on. Hover a chord to see all of its moves; click a pill to add the move and the chord it lands on.</li>
-      <li>Click a <b>gap</b> (the arrow between two cards, or a path in the space) to work <i>between</i> two chords: moves into the right chord sit along the path, and the best chords that could sit between show their way in and out. Wrapping back to the first chord is one of the gaps, not a rule.</li>
-      <li><b>Click</b> adds and sounds a chord with the voice leading intact. <b>Shift-click</b> only sounds it. Click a card to hear it again. <b>Backspace</b> removes the last chord, <b>Esc</b> returns to the end.</li>
-      <li>Drag or scroll to pan, pinch or ctrl-scroll to zoom.</li>
-    </ul>
-  </details>
-</aside>
-
-<footer id="seqbar">
-  <div class="seq-tools">
-    <span class="seq-title">Sequence</span>
-    <button id="undo" title="Remove the last chord (Backspace)">Undo</button>
-    <button id="clear" title="Start over">Clear</button>
-  </div>
-  <div id="seq-cards"></div>
-</footer>
-
-<script type="module" src="js/app.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Skeleton and Moves</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
