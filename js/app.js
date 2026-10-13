@@ -473,7 +473,7 @@
       <div class="row1"><span class="idx">${isGhost ? '+' : i + 1}</span><span class="name">${entryName(e)}</span><span class="roman">${c.roman}</span>${topBadge}
         <button class="slash${slashed ? ' on' : ''}" title="Pin the bass to a note">/</button>
         <button class="top${topped ? ' on' : ''}" title="Pin the top note">▲</button>${actions}</div>
-      <div class="row2"><span class="bass">${noteName(v.bass, c)} ${noteName(v.bass2, c)}</span><span class="upper">${upper}</span>${tag}${v.home ? `<span class="home">→ ${v.home}</span>` : ''}</div>
+      <div class="row2"><span class="bass">${noteName(v.bass, c)}</span><span class="upper">${upper}</span>${tag}${v.home ? `<span class="home">→ ${v.home}</span>` : ''}</div>
       <div class="row3${warn ? ' warn' : ''}">${parts.join(' · ')}</div>`;
     li.appendChild(timingRow(e, i, isGhost));
     if (state.pickerIndex === i) li.appendChild(state.pickerKind === 'top' ? topPicker(e, c, i) : slashPicker(e, c, i));
@@ -753,7 +753,7 @@
     const order = Song.expand(state.progression.map((e) => ({ len: e.len, goto: e.goto, times: e.times })));
     const events = order.map((i) => {
       const v = voicings[i];
-      return { notes: [v.bass, v.bass2, ...v.upper], len: state.progression[i].len };
+      return { notes: [v.bass, ...v.upper], len: state.progression[i].len };
     });
     const blob = new Blob([Song.midi(events, state.tempo)], { type: 'audio/midi' });
     const a = document.createElement('a');

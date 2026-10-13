@@ -63,11 +63,10 @@ const Audio = (() => {
     }
   }
 
-  // Voice-led form: root + 5th in the left hand (root louder so the low sine carries), three voices above.
+  // Voice-led form: the bass (a little louder so it carries) and three voices above.
   function playVoicing(voicing, opts) {
     play([
-      { midi: voicing.bass, gain: 0.26 },
-      { midi: voicing.bass2, gain: 0.17 },
+      { midi: voicing.bass, gain: 0.22 },
       ...voicing.upper.map((midi) => ({ midi, gain: 0.13 })),
     ], opts);
   }

@@ -6,8 +6,8 @@ in a browser (no build step, no dependencies).
 ## Principles
 
 1. **7ths as base.** Every chord in the palette is a 7th chord. No plain triads.
-2. **Four-part voice leading.** The left hand plays the root with the 5th above it. The other hand plays
-   three notes: the 3rd and 7th are always present, the third voice is the
+2. **Four-part voice leading.** The bass plays the root, in the C3 to D4 octave. The other hand plays
+   three notes, none below the bass: the 3rd and 7th are always present, the third voice is the
    5th, root, 9th or 11th, whichever moves least from the previous chord.
    9ths and 11ths are never selected, they emerge. The first chord is in root
    position. When options tie on movement, the one nearer home (the closed
@@ -53,7 +53,7 @@ from a diatonic chord, or no exit into one, are trimmed.
   at the start filters on the last chord, "into" at the end filters on the first,
   which is how you tighten a loop.
 - Click a chord in the progression list to hear it voice-led. The list shows
-  the left hand (root + 5th), the three upper voices, which extension emerged, and why the
+  the bass, the three upper voices, which extension emerged, and why the
   transition is allowed.
 - Play runs the sequence voice-led, ghost included, at the tempo (♩ = BPM)
   and loops until stopped. Each chord has a length: whole bars plus a
@@ -73,9 +73,8 @@ from a diatonic chord, or no exit into one, are trimmed.
   (chords without it are greyed out); shift-click to exclude it (chords with
   it are greyed out). Each note sounds when selected; clicking again clears it.
 - The `/` button on a progression item pins the bass to any note (slash
-  chord). The left hand then plays that note with the root or 5th above it,
-  the upper voices are unchanged, and the root-motion rule is judged on the
-  actual bass line.
+  chord). The bass then plays that note, the upper voices stay above it, and
+  the root-motion rule is judged on the actual bass line.
 - The `▲` button pins the top note. Choices are the notes the upper voices
   may hold (3rd, 7th, 5th, root, 9th, 11th); the voicing search then only
   considers placements with that note on top.
