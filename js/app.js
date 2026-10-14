@@ -514,7 +514,7 @@
     const bars = Math.floor(e.len / Song.BAR), frac = e.len % Song.BAR;
     const setLen = (b, f) => {
       if (b >= Song.MAX_BARS) f = 0;
-      if (b === 0 && f === 0) f = 3;
+      if (b === 0 && f === 0) f = Song.BAR / 4;
       e.len = b * Song.BAR + f;
       stopPlayAll();
       renderList();
@@ -653,13 +653,13 @@
     }));
     const items = [...$('prog').querySelectorAll('li.card')];
     const counts = new Array(n).fill(0);
-    const secPerTwelfth = (60 / state.tempo) * 4 / Song.BAR;
+    const secPerUnit = (60 / state.tempo) * 4 / Song.BAR;
     let i = 0;
     let next = Audio.now() + 0.05;
     const tick = () => {
       const now = Audio.now();
       while (next < now + LOOKAHEAD) {
-        const at = i, dur = steps[i].len * secPerTwelfth;
+        const at = i, dur = steps[i].len * secPerUnit;
         Audio.playVoicing(state.voicings[i], { when: next - now, dur });
         state.playTimers.push(setTimeout(() => {
           items.forEach((li, j) => li.classList.toggle('playing', j === at));

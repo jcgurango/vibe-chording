@@ -57,7 +57,8 @@ from a diatonic chord, or no exit into one, are trimmed.
   transition is allowed.
 - Play runs the sequence voice-led, ghost included, at the tempo (♩ = BPM)
   and loops until stopped. Each chord has a length: whole bars plus a
-  fraction (1/6, 1/4, 1/3, 1/2, 2/3, 3/4, 5/6), up to four bars. Each chord
+  fraction in eighths, sixths, quarters, thirds or halves (1/8, 1/6, 1/4,
+  1/3, 3/8, 1/2, 5/8, 2/3, 3/4, 5/6, 7/8), up to four bars. Each chord
   also has a "then" action: move on to the next chord (the last chord wraps to
   the first), or go back to an earlier chord, either forever or so that the
   stretch is heard 2, 3, 4 or 8 times. Repeats nest: an inner repeat starts

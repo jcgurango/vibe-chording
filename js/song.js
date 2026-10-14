@@ -3,8 +3,9 @@
  * Song structure: chord lengths, the order chords are played in, the
  * human-readable text format and a MIDI writer.
  *
- * Lengths are stored in twelfths of a 4/4 bar, so sixths, quarters, thirds
- * and halves are all whole numbers. One bar = 12. Up to four bars.
+ * Lengths are stored in twenty-fourths of a 4/4 bar, so eighths, sixths,
+ * quarters, thirds and halves are all whole numbers. One bar = 24. Up to
+ * four bars.
  *
  * Each chord has an action for what happens after it:
  *   goto = null            move on to the next chord (the last chord wraps to the first)
@@ -12,12 +13,14 @@
  *   goto = k, times = N    jump back so the stretch k..this is heard N times
  */
 const Song = (() => {
-  const BAR = 12;
+  const BAR = 24;
   const MAX_BARS = 4;
-  // selectable fractions of a bar, in twelfths
+  // selectable fractions of a bar, in twenty-fourths
   const FRACTIONS = [
-    { tw: 0, label: '–' }, { tw: 2, label: '1/6' }, { tw: 3, label: '1/4' }, { tw: 4, label: '1/3' },
-    { tw: 6, label: '1/2' }, { tw: 8, label: '2/3' }, { tw: 9, label: '3/4' }, { tw: 10, label: '5/6' },
+    { tw: 0, label: '–' },
+    { tw: 3, label: '1/8' }, { tw: 4, label: '1/6' }, { tw: 6, label: '1/4' }, { tw: 8, label: '1/3' },
+    { tw: 9, label: '3/8' }, { tw: 12, label: '1/2' }, { tw: 15, label: '5/8' }, { tw: 16, label: '2/3' },
+    { tw: 18, label: '3/4' }, { tw: 20, label: '5/6' }, { tw: 21, label: '7/8' },
   ];
   const TIMES = [null, 2, 3, 4, 8];
 
@@ -28,7 +31,7 @@ const Song = (() => {
     return `${tw / g}/${BAR / g}`;
   }
 
-  // 12 -> "1 bar", 30 -> "2+1/2 bars", 3 -> "1/4 bar"
+  // 24 -> "1 bar", 60 -> "2+1/2 bars", 3 -> "1/8 bar"
   function lengthText(tw) {
     const bars = Math.floor(tw / BAR), rest = tw % BAR;
     if (!rest) return `${bars} bar${bars === 1 ? '' : 's'}`;
@@ -36,7 +39,7 @@ const Song = (() => {
     return `${bars}+${fractionText(rest)} bars`;
   }
 
-  // "1 bar" | "1/2 bar" | "2+1/4 bars" | "1 + 1/4 bars" -> twelfths, or null
+  // "1 bar" | "1/2 bar" | "2+1/4 bars" | "1 + 1/4 bars" -> twenty-fourths, or null
   function parseLength(text) {
     const m = /(?:(\d+)\s*(?:\+\s*)?)?(?:(\d+)\s*\/\s*(\d+))?\s*bars?/i.exec(text);
     if (!m || (m[1] == null && m[2] == null)) return null;
@@ -133,7 +136,7 @@ const Song = (() => {
   // events: [{ notes: [midi], len }] in play order; one track, one channel.
   function midi(events, tempo) {
     const TPQ = 480;
-    const tpt = (TPQ * 4) / BAR;   // ticks per twelfth
+    const tpt = (TPQ * 4) / BAR;   // ticks per length unit
     const bytes = [];
     const vlq = (n) => { const b = [n & 0x7f]; while ((n >>= 7) > 0) b.unshift((n & 0x7f) | 0x80); return b; };
     const ev = (delta, ...data) => bytes.push(...vlq(delta), ...data);
