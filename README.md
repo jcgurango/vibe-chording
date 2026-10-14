@@ -63,6 +63,11 @@ from a diatonic chord, or no exit into one, are trimmed.
   the first), or go back to an earlier chord, either forever or so that the
   stretch is heard 2, 3, 4 or 8 times. Repeats nest: an inner repeat starts
   over every time an outer one jumps back.
+- Alternate readings lists the other keys that hold the progression's chords
+  (same root and quality), each shown with that key's numerals: many C
+  progressions read just as well from F, say. Keys holding every chord come
+  first, then the rest by how many they hold. "Switch to X" changes the key
+  and re-reads every chord there, dropping any the new key doesn't have.
 - Text opens the progression as pastable text: key, tempo, then one chord per
   line with its length, pinned top note and action, e.g.
   `4  G7/B  1+1/4 bars  top F  then back to 2 x2`. Edit or paste and press

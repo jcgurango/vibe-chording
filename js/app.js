@@ -763,6 +763,115 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
+  // ---------- alternate readings ----------
+  // A chord is the same chord in another key when that key's palette has an
+  // entry with the same root and quality; it just gets a different numeral.
+  const sameChord = (palette, c) => palette.find((p) => p.rootPc === c.rootPc && p.quality === c.quality) ?? null;
+  const paletteFor = (k) => Theory.trim(Theory.buildPalette(k), state.rules).kept;
+
+  // Every key, with how the progression reads in it. Sorted by how many of
+  // the distinct chords are present, then how many of those are diatonic,
+  // then closeness to the current key around the circle of fifths.
+  function readings() {
+    const chordOf = (e) => state.byId.get(e.id);
+    const distinct = [...new Map(state.progression.map((e) => { const c = chordOf(e); return [c.rootPc + ':' + c.quality, c]; })).values()];
+    const fifths = (pc) => { const d = Theory.mod12((pc - key().pc) * 7); return Math.min(d, 12 - d); };
+    const rows = Theory.KEYS.map((k, idx) => {
+      const palette = paletteFor(k);
+      const found = distinct.map((c) => sameChord(palette, c)).filter(Boolean);
+      return {
+        idx, key: k,
+        present: found.length, total: distinct.length,
+        diatonic: found.filter((c) => c.cat === 'diatonic').length,
+        chords: state.progression.map((e) => ({ e, to: sameChord(palette, chordOf(e)) })),
+      };
+    });
+    return rows.sort((a, b) => b.present - a.present || b.diatonic - a.diatonic || fifths(a.key.pc) - fifths(b.key.pc));
+  }
+
+  // Re-read the progression in another key: same chords, new numerals; chords
+  // the new key doesn't have are dropped and the actions pointing at them too.
+  function switchKey(idx) {
+    const palette = paletteFor(Theory.KEYS[idx]);
+    const kept = [], dropped = [], newIndex = [];
+    for (const e of state.progression) {
+      const to = sameChord(palette, state.byId.get(e.id));
+      newIndex.push(to ? kept.length : -1);
+      if (to) kept.push({ ...e, id: to.id });
+      else dropped.push(entryName(e));
+    }
+    for (const e of kept) {
+      if (e.goto == null) continue;
+      const t = newIndex[e.goto];
+      if (t < 0) { e.goto = null; e.times = null; } else e.goto = t;
+    }
+    stopPlayAll();
+    state.keyIdx = idx;
+    $('key-select').value = idx;
+    state.progression = kept;
+    state.ghost = null;
+    state.pickerIndex = null;
+    state.cursor = newIndex.slice(0, state.cursor).filter((i) => i >= 0).length;
+    defaultFilters();
+    rebuild();
+    if (dropped.length) toast(`Switched to ${key().name}; dropped ${dropped.join(', ')}`);
+  }
+
+  function openReadings() {
+    if (!state.progression.length) { toast('Add some chords first'); return; }
+    const list = $('alt-list');
+    list.innerHTML = '';
+    for (const r of readings()) {
+      if (!r.present) continue;
+      const current = r.idx === state.keyIdx;
+      const li = document.createElement('li');
+      li.className = 'alt' + (current ? ' current' : '') + (r.present === r.total ? ' full' : '');
+      const head = document.createElement('div');
+      head.className = 'alt-head';
+      const name = document.createElement('b');
+      name.textContent = r.key.name;
+      const count = document.createElement('span');
+      count.className = 'alt-count';
+      count.textContent = `${r.present} of ${r.total} chord${r.total === 1 ? '' : 's'}` + (r.diatonic ? `, ${r.diatonic} diatonic` : '');
+      head.append(name, count);
+      if (current) {
+        const now = document.createElement('span');
+        now.className = 'alt-now';
+        now.textContent = 'current key';
+        head.appendChild(now);
+      } else {
+        const b = document.createElement('button');
+        b.textContent = `Switch to ${r.key.name}`;
+        b.addEventListener('click', () => { $('alt').close(); switchKey(r.idx); });
+        head.appendChild(b);
+      }
+      const seq = document.createElement('div');
+      seq.className = 'alt-seq';
+      for (const { e, to } of r.chords) {
+        const chip = document.createElement('span');
+        const small = document.createElement('small');
+        small.textContent = entryName(e);
+        const big = document.createElement('b');
+        if (to) {
+          chip.className = 'alt-chord';
+          chip.style.setProperty('--c', `var(--${to.cat})`);
+          const bass = e.slash == null ? '' : '/' + (to.spelling[e.slash] ?? Theory.spellInKey(e.slash, r.key)).name;
+          big.textContent = to.roman + bass;
+          chip.title = `${entryName(e)} reads as ${to.roman} in ${r.key.name} (${to.catLabel})`;
+        } else {
+          chip.className = 'alt-chord missing';
+          big.textContent = '—';
+          chip.title = `${entryName(e)} isn't in ${r.key.name}; it would be dropped`;
+        }
+        chip.append(small, big);
+        seq.appendChild(chip);
+      }
+      li.append(head, seq);
+      list.appendChild(li);
+    }
+    $('alt').showModal();
+  }
+
   // ---------- controls ----------
   function initControls() {
     const sel = $('key-select');
@@ -799,12 +908,14 @@
       catch (err) { $('io-msg').textContent = err.message; }
     });
     $('midi').addEventListener('click', exportMidi);
+    $('alt-open').addEventListener('click', openReadings);
+    $('alt-close').addEventListener('click', () => $('alt').close());
     $('piano-clear').addEventListener('click', clearNotes);
     $('undo').addEventListener('click', () => { if (state.progression.length) removeAt(state.progression.length - 1); });
     $('clear').addEventListener('click', clearAll);
 
     document.addEventListener('keydown', (ev) => {
-      if ($('io').open) return;
+      if ($('io').open || $('alt').open) return;
       const tag = ev.target.tagName;
       if (tag === 'SELECT' || tag === 'TEXTAREA' || (tag === 'INPUT' && ev.target.type !== 'checkbox')) return;
       if (ev.key === 'Enter' && state.ghost) { ev.preventDefault(); commitGhost(); }

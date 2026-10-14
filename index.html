@@ -10,6 +10,7 @@
 <header class="topbar">
   <h1>Vibe Chording</h1>
   <label class="key">Key <select id="key-select"></select></label>
+  <button id="alt-open" class="alt-open" title="Other keys this progression can be read from">Alternate readings</button>
   <details class="rules" id="rules">
     <summary>Rules</summary>
     <div class="rules-body">
@@ -71,6 +72,13 @@
   <p class="io-hint">Key, tempo, then one chord per line: name (slash bass allowed), length in bars, optional <code>top E</code>, optional <code>then back to 2 x3</code>. Paste in and press Import to replace the progression.</p>
   <textarea id="io-text" spellcheck="false"></textarea>
   <div class="io-btns"><span id="io-msg" class="io-msg"></span><button id="io-copy">Copy</button><button id="io-import">Import</button><button id="io-close">Close</button></div>
+</dialog>
+
+<dialog id="alt" class="io alt-dialog">
+  <h3>Alternate readings</h3>
+  <p class="io-hint">Other keys that hold the same chords (same root and quality), each read with that key's numerals. Keys with every chord come first, then the rest by how many they hold. Switching re-reads the progression in the new key and drops any chord it doesn't have.</p>
+  <ol id="alt-list" class="alt-list"></ol>
+  <div class="io-btns"><button id="alt-close">Close</button></div>
 </dialog>
 
 <script src="js/theory.js"></script>

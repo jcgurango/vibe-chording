@@ -186,3 +186,21 @@ main { flex: 1; display: grid; grid-template-columns: 1fr 360px; min-height: 0; 
   main { grid-template-columns: 1fr; grid-template-rows: 1fr 260px; }
   .side { border-left: 0; border-top: 1px solid var(--line); }
 }
+
+/* alternate readings */
+.alt-open { font-size: 12px; padding: 3px 8px; }
+.alt-dialog { width: min(640px, 92vw); }
+.alt-list { list-style: none; margin: 0; padding: 0; max-height: 62vh; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+.alt { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: #0b0f1c; }
+.alt.full { border-color: #3b4a7a; }
+.alt.current { opacity: .75; }
+.alt-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.alt-head > b { font-size: 14px; min-width: 22px; }
+.alt-count { color: var(--muted); font-size: 12px; margin-right: auto; }
+.alt-now { color: var(--muted); font-size: 12px; }
+.alt-head button { font-size: 12px; padding: 3px 8px; }
+.alt-seq { display: flex; flex-wrap: wrap; gap: 4px; }
+.alt-chord { display: inline-flex; flex-direction: column; align-items: center; padding: 3px 7px; border-radius: 6px; border: 1px solid var(--c, var(--line)); font-size: 12px; line-height: 1.25; min-width: 36px; }
+.alt-chord small { color: var(--muted); font-size: 10px; }
+.alt-chord.missing { border-style: dashed; color: var(--muted); }
+.alt-chord.missing small { text-decoration: line-through; }
