@@ -143,7 +143,6 @@ const Song = (() => {
     const uspq = Math.round(60e6 / tempo);
     ev(0, 0xff, 0x51, 0x03, (uspq >> 16) & 0xff, (uspq >> 8) & 0xff, uspq & 0xff);
     ev(0, 0xff, 0x58, 0x04, 4, 2, 24, 8);
-    ev(0, 0xc0, 0);
     for (const { notes, len } of events) {
       notes.forEach((m, i) => ev(0, 0x90, m, i === 0 ? 92 : 80));
       const dur = Math.round(len * tpt);
