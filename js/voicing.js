@@ -1,8 +1,10 @@
 'use strict';
 /*
  * Principle 2: four-part voice leading.
- *  - The bass plays the root alone, in the C3..D4 octave. A slashed chord
- *    pins the bass to another note.
+ *  - The bass plays the root alone, in the C3..D4 range. A slashed chord
+ *    pins the bass to another note. Where the range holds the note in two
+ *    octaves, the one that lets the upper voices move least wins; nearness
+ *    to the previous bass only decides between otherwise equal options.
  *  - The other hand plays three notes: the 3rd and 7th are mandatory, the
  *    third voice is the 5th, root, 9th or 11th - whichever makes the smoothest
  *    move from the previous voicing. 9ths and 11ths are never chosen, they emerge.
@@ -61,11 +63,12 @@ const Voicing = (() => {
     return best;
   }
 
-  // The bass note: the pitch class placed nearest the previous bass.
-  function bassNote(bassPc, prevBass) {
+  // Every octave the bass note can take, nearest the previous bass first.
+  function bassOptions(bassPc, prevBass) {
     const target = prevBass ?? BASS_START;
     return midisInRange(bassPc, BASS_LO, BASS_HI)
-      .reduce((a, b) => (Math.abs(b - target) < Math.abs(a - target) ? b : a));
+      .map((m) => ({ bass: m, bassMove: Math.abs(m - target) }))
+      .sort((a, b) => a.bassMove - b.bassMove);
   }
 
   // Notes that may be pinned on top: whatever the upper voices can contain.
@@ -88,33 +91,39 @@ const Voicing = (() => {
     const out = [];
     let prev = null;
     for (const { chord, bassPc, topPc } of items) {
-      let best = null;
-      const bass = bassNote(bassPc ?? chord.rootPc, prev ? prev.bass : null);
-      // every upper voice stays at or above the bass
-      let pool = candidates(chord).filter((v) => v.notes[0] >= bass);
-      if (topPc != null) pool = pool.filter((v) => v.notes[2] % 12 === topPc);
-      if (!pool.length) pool = candidates(chord).filter((v) => v.notes[0] >= bass);
-      if (!prev && topPc == null) {
-        // root position: closed 3-5-7 nearest the middle of the hand
-        const notes = homeVoicing(chord.rootPc, chord.quality, bass);
-        best = { notes, free: 'fifth', move: 0, home: null };
-      } else {
+      // Best upper voices over a given bass. pinned says whether the top pin held.
+      const solve = (bass) => {
+        // every upper voice stays at or above the bass
+        const above = candidates(chord).filter((v) => v.notes[0] >= bass);
+        let pool = topPc == null ? above : above.filter((v) => v.notes[2] % 12 === topPc);
+        const pinned = pool.length > 0;
+        if (!pinned) pool = above;
+        if (!prev && topPc == null) {
+          // root position: closed 3-5-7 nearest the middle of the hand
+          const notes = homeVoicing(chord.rootPc, chord.quality, bass);
+          return { notes, free: 'fifth', move: 0, homeD: 0, home: null, pinned };
+        }
         // score = movement first; home distance and small preferences only break ties.
         // A first chord with a pinned top stays as close to root position as it can.
         const ref = prev ? prev.upper : homeVoicing(chord.rootPc, chord.quality, bass);
         const scored = pool.map((v) => {
           const homeD = homes.map((h) => dist(v.notes, h.notes));
           const nearest = homeD[0] <= homeD[1] ? 0 : 1;
-          return { ...v, move: dist(v.notes, ref), homeD: homeD[nearest], home: prev ? homes[nearest].name : null };
+          return { ...v, move: dist(v.notes, ref), homeD: homeD[nearest], home: prev ? homes[nearest].name : null, pinned };
         });
         const minMove = Math.min(...scored.map((v) => v.move));
-        best = scored
+        return scored
           .filter((v) => v.move <= minMove + TIE_TOLERANCE)
           .sort((a, b) => a.move - b.move || a.homeD - b.homeD
             || (a.free === 'fifth' ? 0 : 1) - (b.free === 'fifth' ? 0 : 1)
             || (a.notes[2] - a.notes[0]) - (b.notes[2] - b.notes[0]))[0];
-      }
-      const voicing = { bass, upper: best.notes, free: best.free, movement: prev ? best.move : 0, home: best.home };
+      };
+      // Try each octave the bass can take: a pin that holds beats one that
+      // can't, then the least upper movement, then the nearest bass.
+      const best = bassOptions(bassPc ?? chord.rootPc, prev ? prev.bass : null)
+        .map((o) => ({ ...o, ...solve(o.bass) }))
+        .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || a.move - b.move || a.homeD - b.homeD || a.bassMove - b.bassMove)[0];
+      const voicing = { bass: best.bass, upper: best.notes, free: best.free, movement: prev ? best.move : 0, home: best.home };
       out.push(voicing);
       prev = voicing;
     }

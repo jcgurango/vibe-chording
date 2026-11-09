@@ -6,7 +6,8 @@ in a browser (no build step, no dependencies).
 ## Principles
 
 1. **7ths as base.** Every chord in the palette is a 7th chord. No plain triads.
-2. **Four-part voice leading.** The bass plays the root, in the C3 to D4 octave. The other hand plays
+2. **Four-part voice leading.** The bass plays the root, in the C3 to D4 range; where that holds
+   two octaves of the note, the one that lets the upper voices move least wins. The other hand plays
    three notes, none below the bass: the 3rd and 7th are always present, the third voice is the
    5th, root, 9th or 11th, whichever moves least from the previous chord.
    9ths and 11ths are never selected, they emerge. The first chord is in root
