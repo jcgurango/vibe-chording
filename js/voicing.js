@@ -8,7 +8,8 @@
  *  - The other hand plays three notes: the 3rd and 7th are mandatory, the
  *    third voice is the 5th, root, 9th or 11th - whichever makes the smoothest
  *    move from the previous voicing. 9ths and 11ths are never chosen, they emerge.
- *    No upper voice may sit below the bass.
+ *    No upper voice may sit below the bass, and if the bass lands on the very
+ *    same note as the lowest upper voice it drops an octave to get out of the way.
  *  - The first chord is in root position: 3rd, 5th, 7th closed above the bass.
  *  - A pinned top note restricts the search to voicings with that note on top.
  *  - Every later chord minimises movement from the previous voicing. Only when
@@ -123,7 +124,9 @@ const Voicing = (() => {
       const best = bassOptions(bassPc ?? chord.rootPc, prev ? prev.bass : null)
         .map((o) => ({ ...o, ...solve(o.bass) }))
         .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || a.move - b.move || a.homeD - b.homeD || a.bassMove - b.bassMove)[0];
-      const voicing = { bass: best.bass, upper: best.notes, free: best.free, movement: prev ? best.move : 0, home: best.home };
+      // a bass doubling the lowest upper voice at the unison drops an octave
+      const bass = best.bass === best.notes[0] ? best.bass - 12 : best.bass;
+      const voicing = { bass, upper: best.notes, free: best.free, movement: prev ? best.move : 0, home: best.home };
       out.push(voicing);
       prev = voicing;
     }
